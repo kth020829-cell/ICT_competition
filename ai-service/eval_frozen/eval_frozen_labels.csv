@@ -1,0 +1,111 @@
+filename,item,yolo_class,pair_id,phase,state,expected,assignee,shot_done,note
+p1 (1).jpg,투명 페트병,pet,pet_01,before,"라벨 부착, 뚜껑 있음",준비 필요 안내,성원,O,"회색타일 위, 조명있음"
+p1 (2).jpg,투명 페트병,pet,pet_01,after,"라벨 제거, 압착, 뚜껑 닫음",투명페트병 전용함,성원,O,"회색타일 위, 조명있음"
+p2 (1).jpg,투명 페트병,pet,pet_02,before,"라벨 부착, 뚜껑 있음",준비 필요 안내,성원,O,"책상 위, 일부분 그림자 짐"
+p2 (2).jpg,투명 페트병,pet,pet_02,after,"라벨 제거, 뚜껑 닫음",투명페트병 전용함,성원,O,"책상 위, 일부분 그림자 짐"
+pet_03_before.jpg,투명 페트병,pet,pet_03,before,"라벨 부착, 뚜껑 있음",준비 필요 안내,성원,,
+pet_03_after.jpg,투명 페트병,pet,pet_03,after,"라벨 제거, 압착, 뚜껑 닫음",투명페트병 전용함,성원,,
+pet_04_before.jpg,투명 페트병,pet,pet_04,before,"라벨 부착, 뚜껑 있음",준비 필요 안내,성원,,
+pet_04_after.jpg,투명 페트병,pet,pet_04,after,"라벨 제거, 압착, 뚜껑 닫음",투명페트병 전용함,성원,,
+pet_05_before.jpg,투명 페트병,pet,pet_05,before,"라벨 부착, 뚜껑 있음",준비 필요 안내,성원,,
+pet_05_after.jpg,투명 페트병,pet,pet_05,after,"라벨 제거, 압착, 뚜껑 닫음",투명페트병 전용함,성원,,
+pet_06_before.jpg,투명 페트병,pet,pet_06,before,"라벨 부착, 뚜껑 있음",준비 필요 안내,성원,,
+pet_06_after.jpg,투명 페트병,pet,pet_06,after,"라벨 제거, 압착, 뚜껑 닫음",투명페트병 전용함,성원,,
+bottle_01_before.jpg,플라스틱 음료병,pet,bottle_01,before,"라벨 부착, 내용물 잔여",준비 필요 안내,성원,,
+bottle_01_after.jpg,플라스틱 음료병,pet,bottle_01,after,"라벨 제거, 헹굼 완료",플라스틱,성원,,
+bottle_02_before.jpg,플라스틱 음료병,pet,bottle_02,before,"라벨 부착, 내용물 잔여",준비 필요 안내,성원,,
+bottle_02_after.jpg,플라스틱 음료병,pet,bottle_02,after,"라벨 제거, 헹굼 완료",플라스틱,성원,,
+bottle_03_before.jpg,플라스틱 음료병,pet,bottle_03,before,"라벨 부착, 내용물 잔여",준비 필요 안내,성원,,
+bottle_03_after.jpg,플라스틱 음료병,pet,bottle_03,after,"라벨 제거, 헹굼 완료",플라스틱,성원,,
+bottle_04_before.jpg,플라스틱 음료병,pet,bottle_04,before,"라벨 부착, 내용물 잔여",준비 필요 안내,성원,,
+bottle_04_after.jpg,플라스틱 음료병,pet,bottle_04,after,"라벨 제거, 헹굼 완료",플라스틱,성원,,
+bottle_05_before.jpg,플라스틱 음료병,pet,bottle_05,before,"라벨 부착, 내용물 잔여",준비 필요 안내,성원,,
+bottle_05_after.jpg,플라스틱 음료병,pet,bottle_05,after,"라벨 제거, 헹굼 완료",플라스틱,성원,,
+pack_01_before.jpg,우유팩,pack,pack_01,before,"내용물 잔여, 접힌 상태",준비 필요 안내,성원,,
+pack_01_after.jpg,우유팩,pack,pack_01,after,"헹굼 완료, 펼쳐서 말림",종이팩 전용함,성원,,
+pack_02_before.jpg,우유팩,pack,pack_02,before,"내용물 잔여, 접힌 상태",준비 필요 안내,성원,,
+pack_02_after.jpg,우유팩,pack,pack_02,after,"헹굼 완료, 펼쳐서 말림",종이팩 전용함,성원,,
+pack_03_before.jpg,우유팩,pack,pack_03,before,"내용물 잔여, 접힌 상태",준비 필요 안내,성원,,
+pack_03_after.jpg,우유팩,pack,pack_03,after,"헹굼 완료, 펼쳐서 말림",종이팩 전용함,성원,,
+pack_04_before.jpg,우유팩,pack,pack_04,before,"내용물 잔여, 접힌 상태",준비 필요 안내,성원,,
+pack_04_after.jpg,우유팩,pack,pack_04,after,"헹굼 완료, 펼쳐서 말림",종이팩 전용함,성원,,
+pack_05_before.jpg,우유팩,pack,pack_05,before,"내용물 잔여, 접힌 상태",준비 필요 안내,성원,,
+pack_05_after.jpg,우유팩,pack,pack_05,after,"헹굼 완료, 펼쳐서 말림",종이팩 전용함,성원,,
+box1 (1).jpg,택배상자,paper,box_01,before,테이프·송장 부착,준비 필요 안내,태현,,
+box1 (2).jpg,택배상자,paper,box_01,after,"테이프·송장 제거, 접음",종이류,태현,,
+box2 (1).jpg,택배상자,paper,box_02,before,테이프·송장 부착,준비 필요 안내,태현,,
+box2 (2).jpg,택배상자,paper,box_02,after,"테이프·송장 제거, 접음",종이류,태현,,
+box3 (1).jpg,택배상자,paper,box_03,before,테이프·송장 부착,준비 필요 안내,태현,,
+box3 (2).jpg,택배상자,paper,box_03,after,"테이프·송장 제거, 접음",종이류,태현,,
+box4 (1).jpg,택배상자,paper,box_04,before,테이프·송장 부착,준비 필요 안내,태현,,
+box4 (2).jpg,택배상자,paper,box_04,after,"테이프·송장 제거, 접음",종이류,태현,,
+box_05_before.jpg,택배상자,paper,box_05,before,테이프·송장 부착,준비 필요 안내,태현,,
+box_05_after.jpg,택배상자,paper,box_05,after,"테이프·송장 제거, 접음",종이류,태현,,
+c1 (1).jpg,알루미늄캔,can,can_01,before,내용물 잔여,준비 필요 안내,민채,O,책상 위
+c1 (3).jpg,알루미늄캔,can,can_01,after,"헹굼 완료, 압축",캔류,민채,O,책상 위
+c2 (1).jpg,알루미늄캔,can,can_02,before,내용물 잔여,준비 필요 안내,민채,O,책상 위
+c2 (3).jpg,알루미늄캔,can,can_02,after,"헹굼 완료, 압축",캔류,민채,O,책상 위
+c3 (1).jpg,알루미늄캔,can,can_03,before,내용물 잔여,준비 필요 안내,민채,O,책상 위
+c3 (3).jpg,알루미늄캔,can,can_03,after,"헹굼 완료, 압축",캔류,민채,O,책상 위
+c4 (1).jpg,알루미늄캔,can,can_04,before,내용물 잔여,준비 필요 안내,민채,O,책상 위
+c4 (3).jpg,알루미늄캔,can,can_04,after,"헹굼 완료, 압축",캔류,민채,O,책상 위
+c5 (1).jpg,알루미늄캔,can,can_05,before,내용물 잔여,준비 필요 안내,민채,O,책상 위
+c5 (3).jpg,알루미늄캔,can,can_05,after,"헹굼 완료, 압축",캔류,민채,O,책상 위
+r1 (1).jpg,컵라면 종이용기,paper,cupramen_01,before,국물·건더기 잔여,준비 필요 안내,태현,O,
+r1 (2).jpg,컵라면 종이용기,paper,cupramen_01,after,세척 완료,종이류,태현,O,
+r2 (1).jpg,컵라면 종이용기,paper,cupramen_02,before,국물·건더기 잔여,준비 필요 안내,태현,O,
+r2 (2).jpg,컵라면 종이용기,paper,cupramen_02,after,세척 완료,종이류,태현,O,
+r3 (1).jpg,컵라면 종이용기,paper,cupramen_03,before,국물·건더기 잔여,준비 필요 안내,태현,,
+r3 (2).jpg,컵라면 종이용기,paper,cupramen_03,after,세척 완료,종이류,태현,,
+r4 (1).jpg,컵라면 종이용기,paper,cupramen_04,before,국물·건더기 잔여,준비 필요 안내,태현,,
+r4 (2).jpg,컵라면 종이용기,paper,cupramen_04,after,세척 완료,종이류,태현,,
+cupramen_05_before.jpg,컵라면 종이용기,paper,cupramen_05,before,국물·건더기 잔여,준비 필요 안내,태현,,
+cupramen_05_after.jpg,컵라면 종이용기,paper,cupramen_05,after,비빔면 양념 착색(제거 불가),일반쓰레기,태현,,
+b1 (1).jpg,배달 플라스틱 용기,plastic,delivery_01,before,양념 잔여,준비 필요 안내,민채,O,
+b1 (2).jpg,배달 플라스틱 용기,plastic,delivery_01,after,세척 완료,플라스틱,민채,O,
+b2 (1).jpg,배달 플라스틱 용기,plastic,delivery_02,before,양념 잔여,준비 필요 안내,민채,O,
+b2 (2).jpg,배달 플라스틱 용기,plastic,delivery_02,after,세척 완료,플라스틱,민채,O,
+b3 (1).jpg,배달 플라스틱 용기,plastic,delivery_03,before,양념 잔여,준비 필요 안내,민채,O,
+b3 (2).jpg,배달 플라스틱 용기,plastic,delivery_03,after,세척 완료,플라스틱,민채,O,
+b4 (1).jpg,배달 플라스틱 용기,plastic,delivery_04,before,양념 잔여,준비 필요 안내,민채,O,
+b4 (2).jpg,배달 플라스틱 용기,plastic,delivery_04,after,세척 완료,플라스틱,민채,O,
+b5 (1).jpg,배달 플라스틱 용기,plastic,delivery_05,before,양념 잔여,준비 필요 안내,민채,O,
+b5 (2).jpg,배달 플라스틱 용기,plastic,delivery_05,after,세척 완료,플라스틱,민채,O,
+a1 (1).jpg,아이스크림 포장지,vinyl,icecream_01,before,"내용물 잔여, 끈적임",준비 필요 안내,민채,O,
+a1 (2).jpg,아이스크림 포장지,vinyl,icecream_01,after,헹굼 완료,비닐류,민채,O,
+a2 (1).jpg,아이스크림 포장지,vinyl,icecream_02,before,"내용물 잔여, 끈적임",준비 필요 안내,민채,O,
+a2 (2).jpg,아이스크림 포장지,vinyl,icecream_02,after,헹굼 완료,비닐류,민채,O,
+a3 (1).jpg,아이스크림 포장지,vinyl,icecream_03,before,"내용물 잔여, 끈적임",준비 필요 안내,민채,O,
+a3 (2).jpg,아이스크림 포장지,vinyl,icecream_03,after,헹굼 완료,비닐류,민채,O,
+a4 (1).jpg,아이스크림 포장지,vinyl,icecream_04,before,"내용물 잔여, 끈적임",준비 필요 안내,민채,O,
+a4 (2).jpg,아이스크림 포장지,vinyl,icecream_04,after,헹굼 완료,비닐류,민채,O,
+a5 (1).jpg,아이스크림 포장지,vinyl,icecream_05,before,"내용물 잔여, 끈적임",준비 필요 안내,민채,O,
+a5 (2).jpg,아이스크림 포장지,vinyl,icecream_05,after,헹궈도 끈적임 남음,일반쓰레기,민채,O,
+toothbrush_01.jpg,칫솔,plastic,,single,-,일반쓰레기,성원,,
+toothbrush_02.jpg,칫솔,plastic,,single,-,일반쓰레기,성원,,
+toothbrush_03.jpg,칫솔,plastic,,single,-,일반쓰레기,성원,,
+toothbrush_04.jpg,칫솔,plastic,,single,-,일반쓰레기,성원,,
+straw_01.jpg,빨대,plastic,,single,-,일반쓰레기,성원,,
+straw_02.jpg,빨대,plastic,,single,-,일반쓰레기,성원,,
+straw_03.jpg,빨대,plastic,,single,-,일반쓰레기,성원,,
+straw_04.jpg,빨대,plastic,,single,-,일반쓰레기,성원,,
+chopstick_01.jpg,나무젓가락,(폴백),,single,-,일반쓰레기,민채,,YOLO 미대응 → VLM 단독
+chopstick_02.jpg,나무젓가락,(폴백),,single,-,일반쓰레기,민채,,YOLO 미대응 → VLM 단독
+chopstick_03.jpg,나무젓가락,(폴백),,single,-,일반쓰레기,민채,,YOLO 미대응 → VLM 단독
+chopstick_04.jpg,나무젓가락,(폴백),,single,-,일반쓰레기,민채,,YOLO 미대응 → VLM 단독
+battery_01.jpg,건전지,(폴백),,single,-,폐건전지 전용 수거함,민채,,YOLO 미대응 → VLM 단독
+battery_02.jpg,건전지,(폴백),,single,-,폐건전지 전용 수거함,민채,,YOLO 미대응 → VLM 단독
+battery_03.jpg,건전지,(폴백),,single,-,폐건전지 전용 수거함,민채,,YOLO 미대응 → VLM 단독
+battery_04.jpg,건전지,(폴백),,single,-,폐건전지 전용 수거함,민채,,YOLO 미대응 → VLM 단독
+receipt (1).jpeg,영수증,paper,,single,-,일반쓰레기,태현,O,
+receipt (2).jpeg,영수증,paper,,single,-,일반쓰레기,태현,O,
+receipt (3).jpeg,영수증,paper,,single,-,일반쓰레기,태현,O,
+receipt (4).jpeg,영수증,paper,,single,-,일반쓰레기,태현,O,
+coated (1).jpeg,코팅지(라미네이팅),paper,,single,,일반쓰레기,태현,O,일반종이와 나란히
+coated (1).jpg,코팅지(라미네이팅),paper,,single,,일반쓰레기,태현,O,일반종이와 나란히
+coated (1).png,코팅지(라미네이팅),paper,,single,,일반쓰레기,태현,O,정면반사
+coated (2).jpg,코팅지(라미네이팅),paper,,single,,일반쓰레기,태현,O,구부림
+icepack (1).jpeg,아이스팩,(폴백),,single,젤 타입,일반쓰레기(통째로),태현,O,YOLO 미대응 → VLM 단독 / 분기 UI 필요
+icepack (2).jpeg,아이스팩,(폴백),,single,젤 타입,일반쓰레기(통째로),태현,O,YOLO 미대응 → VLM 단독 / 분기 UI 필요
+icepack (3).jpeg,아이스팩,(폴백),,single,물 타입,물 버리고 비닐류,태현,O,YOLO 미대응 → VLM 단독 / 분기 UI 필요
+icepack (4).jpeg,아이스팩,(폴백),,single,물 타입,물 버리고 비닐류,태현,O,YOLO 미대응 → VLM 단독 / 분기 UI 필요

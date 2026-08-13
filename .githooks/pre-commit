@@ -1,0 +1,46 @@
+#!/bin/sh
+# 커밋 전 비밀정보 차단.
+#
+# 설치 (클론한 사람마다 한 번):
+#     git config core.hooksPath .githooks
+#
+# 우회가 꼭 필요하면 git commit --no-verify 지만, 그 전에 왜 걸렸는지 본다.
+
+fail=0
+
+# --- 1. .env 파일 자체가 스테이징된 경우 -------------------------------------
+# .gitignore가 이미 막지만, git add -f 로 강제로 넣은 경우를 잡는다.
+staged_env=$(git diff --cached --name-only --diff-filter=ACM \
+    | grep -E '(^|/)\.env($|\.)' \
+    | grep -v '\.env\.example$')
+
+if [ -n "$staged_env" ]; then
+    echo "커밋 중단: .env 파일이 스테이징되었습니다."
+    echo "$staged_env" | sed 's/^/  - /'
+    echo ""
+    echo "  해제: git restore --staged <파일>"
+    echo "  .env 는 커밋하지 않습니다. 공유는 .env.example 로 합니다."
+    fail=1
+fi
+
+# --- 2. 스테이징된 내용에 API 키가 들어간 경우 --------------------------------
+# 파일명과 무관하게 내용을 본다. 코드에 하드코딩한 키도 여기서 걸린다.
+# sk-ant-  : Anthropic
+# ghp_/gho_: GitHub Personal Access Token
+leaked=$(git diff --cached --diff-filter=ACM -U0 \
+    | grep -E '^\+' \
+    | grep -nE 'sk-ant-[A-Za-z0-9_-]{10,}|gh[pos]_[A-Za-z0-9]{20,}')
+
+if [ -n "$leaked" ]; then
+    echo "커밋 중단: 추가된 줄에서 API 키 형태의 문자열이 발견되었습니다."
+    echo ""
+    # 키 전체를 로그에 남기지 않는다. 앞 12자만 보여준다.
+    echo "$leaked" | sed -E 's/(sk-ant-|gh[pos]_)([A-Za-z0-9_-]{6})[A-Za-z0-9_-]*/\1\2.../g' \
+                   | sed 's/^/  /'
+    echo ""
+    echo "  키는 .env 에 두고 코드에서는 환경변수로 읽습니다."
+    echo "  (app/core/config.py 가 이미 그렇게 되어 있습니다)"
+    fail=1
+fi
+
+exit $fail
