@@ -1,0 +1,29 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# 모델 가중치는 용량이 커서 git에 올리지 않는다.
+# dasibom_v1_best.pt 는 팀 드라이브에서 받아 app/models/weights/ 에 둔다.
+app/models/weights/*.pt
+app/models/weights/*.onnx
+
+# 동결 평가셋 사진은 용량이 커서(50장 125MB) git에 올리지 않는다.
+# 팀 드라이브로 공유하고 eval_frozen/images/ 에 풀어서 쓴다.
+# 라벨 CSV는 커밋한다 — 그게 평가의 기준이다.
+eval_frozen/images/*
+!eval_frozen/images/.gitkeep
+
+# 크롭 이미지는 아동 개인정보다. 절대 커밋하지 않는다. (지시서 §11-5)
+app/cache/
+tmp/
+crops/
+
+# 평가 실행 산출물. 숫자는 README에 정리해서 남긴다.
+eval_result.txt
+eval_result*.txt
+
+.DS_Store
