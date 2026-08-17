@@ -2,6 +2,7 @@ from fastapi import FastAPI
 
 from app.routers.auth import router as auth_router
 from app.routers.student import router as student_router
+from app.routers.home import router as home_router
 
 
 app = FastAPI()
@@ -9,6 +10,7 @@ app = FastAPI()
 
 app.include_router(auth_router)
 app.include_router(student_router)
+app.include_router(home_router)
 
 
 @app.get("/")
