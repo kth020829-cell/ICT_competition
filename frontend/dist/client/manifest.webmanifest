@@ -1,0 +1,10 @@
+{
+  "name": "다시봄 스쿨",
+  "short_name": "다시봄",
+  "description": "AI 카메라 분리배출 탐험",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fbf8ed",
+  "theme_color": "#1b9b66",
+  "lang": "ko"
+}
