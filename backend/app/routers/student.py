@@ -44,5 +44,7 @@ def get_student_me(
         "classId": student_data.get("classId"),
         "nickname": student_data.get("nickname"),
         "xp": student_data.get("xp", 0),
-        "level": student_data.get("level", 1)
+        "level": student_data.get("level", 1),
+        "loginCount": student_data.get("loginCount", 0),
+        "badge": student_data.get("badge", None)
     }

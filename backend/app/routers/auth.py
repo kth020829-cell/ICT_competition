@@ -68,7 +68,9 @@ def student_join(request: StudentJoinRequest):
         "nickname": request.nickname,
         "studentToken": student_token,
         "xp": 0,
-        "level": 1
+        "level": 1,
+        "LoginCount": 1,
+        "badge": "bronze"
     })
 
     # 6. 응답
