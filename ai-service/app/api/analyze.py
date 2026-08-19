@@ -13,7 +13,8 @@ from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Uploa
 from app.core.config import get_settings
 from app.mocks import scenarios
 from app.schemas.request import AnalyzeRequest, analyze_form
-from app.schemas.response import AnalyzeResponse
+from app.schemas.response import AnalyzeResponse, SessionResult
+from app.services import backend_adapter
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/v1", tags=["analyze"])
@@ -25,15 +26,13 @@ MAX_IMAGE_BYTES = 12 * 1024 * 1024
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"}
 
 
-@router.post("/analyze", response_model=AnalyzeResponse, response_model_by_alias=True)
-async def analyze(
-    image: UploadFile = File(..., description="분석할 사진 1장"),
-    req: AnalyzeRequest = Depends(analyze_form),
-    mock_scenario_field: str | None = Form(None, alias="mockScenario"),
-    mock_scenario_header: str | None = Header(None, alias="X-Mock-Scenario"),
-) -> AnalyzeResponse:
-    settings = get_settings()
+async def read_image_payload(image: UploadFile) -> bytes:
+    """업로드 이미지를 검증해서 바이트로 돌려준다.
 
+    `/v1/analyze` 와 `/v1/analyze/session` 이 같은 검증을 쓰도록 떼어냈다.
+    두 경로가 서로 다른 크기·형식 제한을 갖게 되면 백엔드 담당자가 어느 쪽을
+    쓰느냐에 따라 통과 여부가 달라진다.
+    """
     payload = await image.read()
     if not payload:
         raise HTTPException(status_code=400, detail="빈 이미지입니다.")
@@ -46,6 +45,14 @@ async def analyze(
         raise HTTPException(
             status_code=415, detail=f"지원하지 않는 형식입니다: {image.content_type}"
         )
+    return payload
+
+
+def run_analysis(
+    payload: bytes, req: AnalyzeRequest, scenario_name: str | None = None
+) -> AnalyzeResponse:
+    """AI_MODE에 따라 실제 파이프라인 또는 mock 시나리오를 태운다."""
+    settings = get_settings()
 
     if settings.ai_mode in {"remote", "cached"}:
         from app.services import pipeline  # 무거운 의존성이라 필요할 때만 임포트한다
@@ -61,7 +68,6 @@ async def analyze(
             # VLM으로 넘어간다. 실패를 드러내는 편이 안전하다. (지시서 §11-5)
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 
-    scenario_name = mock_scenario_field or mock_scenario_header
     if scenario_name and scenario_name not in scenarios.SCENARIOS:
         raise HTTPException(
             status_code=400,
@@ -81,6 +87,51 @@ async def analyze(
         response.status,
     )
     return response
+
+
+@router.post("/analyze", response_model=AnalyzeResponse, response_model_by_alias=True)
+async def analyze(
+    image: UploadFile = File(..., description="분석할 사진 1장"),
+    req: AnalyzeRequest = Depends(analyze_form),
+    mock_scenario_field: str | None = Form(None, alias="mockScenario"),
+    mock_scenario_header: str | None = Header(None, alias="X-Mock-Scenario"),
+) -> AnalyzeResponse:
+    payload = await read_image_payload(image)
+    return run_analysis(payload, req, mock_scenario_field or mock_scenario_header)
+
+
+@router.post(
+    "/analyze/session",
+    response_model=SessionResult,
+    response_model_by_alias=True,
+    tags=["backend"],
+)
+async def analyze_for_session(
+    image: UploadFile = File(..., description="분석할 사진 1장"),
+    req: AnalyzeRequest = Depends(analyze_form),
+    mock_scenario_field: str | None = Form(None, alias="mockScenario"),
+    mock_scenario_header: str | None = Header(None, alias="X-Mock-Scenario"),
+) -> SessionResult:
+    """판정 결과를 백엔드 세션 result 양식으로 돌려준다.
+
+    `/v1/analyze` 와 입력이 완전히 같고 응답만 다르다. 백엔드가
+    `SessionResultRequest(**응답)` 으로 그대로 받을 수 있게 평평하게 낸다.
+    앞의 6개 필드가 그 모델과 1:1로 맞고, 나머지는 pydantic이 무시하는
+    부가 정보다. (명세서 §3)
+    """
+    payload = await read_image_payload(image)
+    response = run_analysis(payload, req, mock_scenario_field or mock_scenario_header)
+    result = backend_adapter.to_session_result(response)
+
+    logger.info(
+        "analyze/session phase=%s session=%s -> aiStatus=%s needsAction=%s actions=%s",
+        req.phase,
+        req.scan_session_id,
+        result.ai_status,
+        result.needs_action,
+        result.action_codes,
+    )
+    return result
 
 
 @router.get("/mock/scenarios", tags=["mock"])

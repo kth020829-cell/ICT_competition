@@ -213,6 +213,8 @@ def after_success(req: AnalyzeRequest) -> AnalyzeResponse:
     response.status = AnalysisStatus.IMPROVED
     response.comparison = Comparison(
         sameClass=True,
+        expectedClass=YoloClass.PET,
+        detectedClass=YoloClass.PET,
         improvedActions=[ActionCode.REMOVE_LABEL, ActionCode.CRUSH],
         remainingActions=[],
         regressedActions=[],
@@ -263,6 +265,8 @@ def after_partial(req: AnalyzeRequest) -> AnalyzeResponse:
         ),
         comparison=Comparison(
             sameClass=True,
+            expectedClass=YoloClass.PET,
+            detectedClass=YoloClass.PET,
             improvedActions=[ActionCode.REMOVE_LABEL],
             remainingActions=[ActionCode.CRUSH],
             regressedActions=[],

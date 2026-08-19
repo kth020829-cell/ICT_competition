@@ -258,6 +258,61 @@ curl -X POST http://localhost:8001/v1/analyze \
   -F "mockScenario=pet_action_required"
 ```
 
+### `POST /v1/analyze/session` — 백엔드 세션 양식
+
+**백엔드 코드를 고치지 않고 붙이려면 이걸 쓴다.** 입력은 `/v1/analyze`와 완전히
+같고 응답만 평평하다. 백엔드 `SessionResultRequest(**응답)`으로 그대로 들어간다.
+
+```bash
+curl -X POST http://localhost:8001/v1/analyze/session \
+  -F "image=@sample.jpg" \
+  -F "scanSessionId=scan_01JABC123" \
+  -F "phase=BEFORE"
+```
+
+```json
+{
+  "detectedClass": "pet",
+  "confidence": 0.604,
+  "needsAction": true,
+  "actions": ["내용물 비우기", "라벨 떼기", "납작하게 누르기"],
+  "disposalCategory": "CLEAR_PET_BIN",
+  "feedbackText": "뚜껑이 아직 닫혀 있고 라벨도 그대로 붙어 있네. ...",
+
+  "analysisId": "analysis_01M0CHG3AYRE9NC2",
+  "actionCodes": ["EMPTY_CONTENT", "REMOVE_LABEL", "CRUSH"],
+  "aiStatus": "ACTION_REQUIRED",
+  "improved": null,
+  "remainingActions": [],
+  "remainingActionCodes": [],
+  "error": null
+}
+```
+
+위 6개가 `SessionResultRequest`와 1:1이고, 아래는 부가 정보다. pydantic v2가
+모르는 키를 무시하므로 그냥 넘겨도 된다.
+
+| 부가 필드 | 왜 필요한가 |
+|---|---|
+| `analysisId` | **세션 문서에 저장해야 한다.** 재촬영 때 `beforeAnalysisId`로 되돌려주지 않으면 개선 여부를 계산할 수 없다 |
+| `actionCodes` | 미션·뱃지 판정용. `actions`(한글)와 순서가 같다. 한글 라벨로 판정하면 문구가 바뀔 때 깨진다 |
+| `aiStatus` | 백엔드 3종으로 표현되지 않는 `IMPROVED` / `PARTIALLY_IMPROVED` / `REJECTED` 등 |
+| `improved` | `AFTER`에서만 채워진다. **보상의 근거는 이 값이지 클라이언트가 보낸 값이 아니다** |
+| `remainingActions` | `AFTER`에서 아직 남은 행동 |
+| `error` | 거부·실패 사유. `retryable`로 재촬영 안내와 중단 안내를 가른다 |
+
+`AFTER`일 때는 `actions`에 Before의 요구를 다시 담지 않고 **남은 행동만** 넣는다.
+그러지 않으면 아이가 해낸 일이 화면에서 지워진다. (지시서 §4.2)
+
+거부(`REJECTED`)·실패(`FAILED`)일 때는 품목이 없으므로 `detectedClass`와
+`disposalCategory`가 **빈 문자열**로 온다. 백엔드 모델이 두 필드를 필수 문자열로
+받기 때문에 `null`을 넣을 자리가 없다. 이때 `needsAction`은 `true`로 오는데,
+백엔드가 `if needsAction: ACTION_REQUIRED`로 상태를 정하므로 그래야 재촬영 안내
+화면으로 간다. 사유는 `error`를 보면 된다.
+
+> 백엔드 양식에는 `states` · `boundingBox` · `processing` 자리가 없다.
+> 그 값들이 필요해지면 `/v1/analyze`를 쓴다.
+
 ---
 
 ## 발표용 캐시 (STEP 9)
