@@ -151,6 +151,8 @@ class DetectionSource(StrEnum):
 
 class ErrorCode(StrEnum):
     FACE_DETECTED = "FACE_DETECTED"
+    #: 칼·주사기·깨진 유리 등. 아이에게 다시 찍게 하면 안 되는 유일한 코드다.
+    DANGEROUS_OBJECT = "DANGEROUS_OBJECT"
     NOT_WASTE = "NOT_WASTE"
     MULTIPLE_OBJECTS = "MULTIPLE_OBJECTS"
     LOW_CONFIDENCE = "LOW_CONFIDENCE"
@@ -160,6 +162,8 @@ class ErrorCode(StrEnum):
     AI_TIMEOUT = "AI_TIMEOUT"
     VLM_UNAVAILABLE = "VLM_UNAVAILABLE"
     INVALID_AI_OUTPUT = "INVALID_AI_OUTPUT"
+    #: 도감 28종에 없는 품목. 재촬영해도 같은 결과라 다른 물건을 권한다.
+    UNSUPPORTED_CLASS = "UNSUPPORTED_CLASS"
 
 
 #: 재시도 가능 여부. 지시서 §5.7 표의 "재시도" 열.
@@ -167,6 +171,9 @@ class ErrorCode(StrEnum):
 #: 아이에게 재촬영을 요구하지 않는다 → False.
 ERROR_RETRYABLE: dict[str, bool] = {
     ErrorCode.FACE_DETECTED: True,
+    #: 같은 물건을 다시 찍게 하면 아이가 위험물을 한 번 더 만진다.
+    #: 명세서 §6 "일반 재시도 금지"가 이 뜻이다.
+    ErrorCode.DANGEROUS_OBJECT: False,
     ErrorCode.NOT_WASTE: True,
     ErrorCode.MULTIPLE_OBJECTS: True,
     ErrorCode.LOW_CONFIDENCE: True,
@@ -176,6 +183,7 @@ ERROR_RETRYABLE: dict[str, bool] = {
     ErrorCode.AI_TIMEOUT: True,
     ErrorCode.VLM_UNAVAILABLE: False,
     ErrorCode.INVALID_AI_OUTPUT: False,
+    ErrorCode.UNSUPPORTED_CLASS: False,
 }
 
 

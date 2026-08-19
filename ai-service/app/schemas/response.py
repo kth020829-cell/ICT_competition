@@ -38,6 +38,10 @@ class BoundingBox(CamelModel):
 class Safety(CamelModel):
     face_detected: bool = Field(alias="faceDetected")
     is_waste_image: bool = Field(alias="isWasteImage")
+    #: 명세서 §4가 요구하는 필드. 아직 전용 검출기가 없어 항상 False로 나간다.
+    #: 필드를 미리 내보내는 이유는 백엔드·프론트가 분기를 먼저 짜둘 수 있게
+    #: 하려는 것이다. 검출기가 붙으면 값만 채워진다.
+    dangerous_object_detected: bool = Field(default=False, alias="dangerousObjectDetected")
 
 
 class Detection(CamelModel):
@@ -79,6 +83,11 @@ class Comparison(CamelModel):
     """Before/After 비교 결과 (지시서 §5.6). AFTER 단계에서만 채워진다."""
 
     same_class: bool = Field(alias="sameClass")
+    #: 명세서 §5가 요구하는 두 필드. sameClass가 False일 때 백엔드가
+    #: CLASS_MISMATCH 안내를 만들려면 어떤 품목이 어떤 품목으로 바뀐 것인지
+    #: 알아야 한다. sameClass 하나만으로는 그 문장을 못 만든다.
+    expected_class: str | None = Field(default=None, alias="expectedClass")
+    detected_class: str | None = Field(default=None, alias="detectedClass")
     improved_actions: list[ActionCode] = Field(default_factory=list, alias="improvedActions")
     remaining_actions: list[ActionCode] = Field(default_factory=list, alias="remainingActions")
     regressed_actions: list[ActionCode] = Field(default_factory=list, alias="regressedActions")
@@ -139,6 +148,50 @@ class CompareResponse(CamelModel):
     comparison: Comparison
     reward_eligible: bool = Field(alias="rewardEligible")
     feedback: Feedback
+
+
+class SessionResult(CamelModel):
+    """백엔드 세션 result 양식 (명세서 §3).
+
+    백엔드 `SessionResultRequest` 와 앞의 6개 필드가 1:1로 맞는다. 백엔드는
+    `SessionResultRequest(**응답)` 으로 그대로 받으면 되고, 뒤의 부가 필드는
+    pydantic이 알아서 무시한다(v2 기본값 extra="ignore").
+
+    **왜 평평하게 내는가.** 백엔드가 이미 이 모양으로 Firestore에 저장하도록
+    짜여 있다. AI 응답 구조를 백엔드가 다시 풀어헤치게 하면 매핑 코드가
+    백엔드에 생기고, 그 코드는 AI 스키마가 바뀔 때마다 같이 깨진다. 변환을
+    AI 쪽에 두면 고칠 자리가 여기 하나로 남는다.
+    """
+
+    # --- 백엔드 SessionResultRequest 와 1:1 ---
+    detected_class: str = Field(alias="detectedClass")
+    confidence: float = Field(ge=0.0, le=1.0)
+    needs_action: bool = Field(alias="needsAction")
+    #: 아이에게 보여줄 한글 라벨. 명세서 §3 예시가 한글 문자열이다.
+    actions: list[str] = Field(default_factory=list)
+    disposal_category: str = Field(alias="disposalCategory")
+    feedback_text: str = Field(alias="feedbackText")
+
+    # --- 부가 정보. 백엔드가 필요할 때만 읽으면 된다 ---
+    #: **After 비교에 반드시 필요하다.** 백엔드가 세션 문서에 저장해두고
+    #: 재촬영 때 `beforeAnalysisId` 로 되돌려줘야 개선 여부를 계산할 수 있다.
+    analysis_id: str = Field(alias="analysisId")
+    #: 미션·뱃지 판정용 행동 코드. 명세서 §2가 "백엔드는 이 코드로 미션과
+    #: 뱃지를 판정한다"고 못박은 그 코드다. actions(한글)와 순서가 같다.
+    action_codes: list[str] = Field(default_factory=list, alias="actionCodes")
+    #: AI 원본 상태. 백엔드 3종(ACTION_REQUIRED/COMPLETED/CREATED)으로는
+    #: 표현되지 않는 IMPROVED·PARTIALLY_IMPROVED·REJECTED 등이 그대로 실린다.
+    ai_status: AnalysisStatus = Field(alias="aiStatus")
+    #: AFTER 단계에서만 채워진다. 개선을 모두 해냈는지.
+    improved: bool | None = None
+    #: AFTER 단계에서 아직 남은 행동 (한글 라벨 / 코드).
+    remaining_actions: list[str] = Field(default_factory=list, alias="remainingActions")
+    remaining_action_codes: list[str] = Field(
+        default_factory=list, alias="remainingActionCodes"
+    )
+    #: 판정을 거부·실패한 경우. 프론트가 retryable로 재촬영 안내와 중단
+    #: 안내를 갈라야 한다. (명세서 §6)
+    error: AnalysisError | None = None
 
 
 class HealthResponse(CamelModel):

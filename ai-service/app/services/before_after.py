@@ -55,6 +55,8 @@ def compare(
 
     return Comparison(
         sameClass=same_class,
+        expectedClass=before.class_code,
+        detectedClass=after_class_code,
         improvedActions=improved,
         remainingActions=remaining,
         regressedActions=regressed,

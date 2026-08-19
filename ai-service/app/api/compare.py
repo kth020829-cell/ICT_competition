@@ -29,6 +29,8 @@ def _mock_response(req: CompareRequest) -> CompareResponse:
         status=AnalysisStatus.PARTIALLY_IMPROVED,
         comparison=Comparison(
             sameClass=True,
+            expectedClass="pet",
+            detectedClass="pet",
             improvedActions=[ActionCode.REMOVE_LABEL],
             remainingActions=[ActionCode.CRUSH],
             regressedActions=[],
