@@ -6,6 +6,7 @@ from fastapi import UploadFile, File
 from pydantic import BaseModel
 
 from app.firebase import db
+from firebase_admin import firestore
 
 
 router = APIRouter(
@@ -211,6 +212,124 @@ async def upload_before_image(
     }
 
 
+def collect_card(
+    student_id: str,
+    detected_class: str
+    ):
+    """
+    AI가 판정한 detectedClass를 기준으로
+    cards 컬렉션에서 카드를 찾고
+    학생의 collection에 자동 등록한다.
+    """
+
+    # ==========================================
+    # 1. 카드 찾기
+    # ==========================================
+
+    card_docs = (
+        db.collection("card")
+        .where(
+            "type",
+            "==",
+            detected_class
+        )
+        .limit(1)
+        .stream()
+    )
+
+    card_docs = list(card_docs)
+
+    # 카드가 등록되어 있지 않은 경우
+    if not card_docs:
+        return {
+            "registered": False,
+            "cardId": None,
+            "isNew": False,
+            "count": 0
+        }
+
+    card_doc = card_docs[0]
+    card_data = card_doc.to_dict()
+
+    card_id = card_doc.id
+
+
+    # ==========================================
+    # 2. 학생 문서
+    # ==========================================
+
+    student_ref = (
+        db.collection("students")
+        .document(student_id)
+    )
+
+    student_doc = student_ref.get()
+
+    if not student_doc.exists:
+        return {
+            "registered": False,
+            "cardId": card_id,
+            "isNew": False,
+            "count": 0
+        }
+
+    student_data = student_doc.to_dict()
+
+
+    # ==========================================
+    # 3. 기존 수집 상태 확인
+    # ==========================================
+
+    student_collection = student_data.get(
+        "collection",
+        {}
+    )
+
+    existing_card = student_collection.get(
+        card_id
+    )
+
+    is_new = (
+        existing_card is None
+        or not existing_card.get("collected", False)
+    )
+
+
+    # ==========================================
+    # 4. 수집 상태 업데이트
+    # ==========================================
+
+    current_count = 0
+
+    if existing_card:
+        current_count = existing_card.get(
+            "count",
+            0
+        )
+
+    new_count = current_count + 1
+
+    student_ref.update({
+        f"collection.{card_id}.collected": True,
+        f"collection.{card_id}.count": (
+            firestore.Increment(1)
+        )
+    })
+
+
+    # ==========================================
+    # 5. 결과 반환
+    # ==========================================
+
+    return {
+        "registered": True,
+        "cardId": card_id,
+        "name": card_data.get("name"),
+        "isNew": is_new,
+        "count": new_count
+    }
+
+
 # ==========================================
 # POST /sessions/{session_id}/result
 # AI 판정 결과 저장
@@ -297,18 +416,42 @@ def save_session_result(
     else:
         status = "COMPLETED"
 
-    # 7. Firestore에 한 번에 저장
+    # ==========================================
+    # 7. 세션 결과 저장
+    # ==========================================
+
     session_ref.update({
         "result": result_data,
         "status": status
     })
 
-    # 8. 응답
+
+    # ==========================================
+    # 8. 도감 자동 수집
+    # ==========================================
+
+    collection_result = {
+        "registered": False,
+        "cardId": None,
+        "isNew": False,
+        "count": 0
+    }
+
+    collection_result = collect_card(
+        student_id=student_id,
+        detected_class=request.detectedClass
+    )
+
+    # ==========================================
+    # 9. 응답
+    # ==========================================
+
     return {
         "success": True,
         "sessionId": session_id,
         "status": status,
-        "result": result_data
+        "result": result_data,
+        "collection": collection_result
     }
 
 

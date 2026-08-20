@@ -6,6 +6,7 @@ from app.routers.home import router as home_router
 from app.routers.session import router as session_router
 from app.routers.reward import router as reward_router
 from app.routers.mission import router as mission_router
+from app.routers.collection import router as collection_router
 
 app = FastAPI()
 
@@ -16,6 +17,7 @@ app.include_router(home_router)
 app.include_router(session_router)
 app.include_router(reward_router)
 app.include_router(mission_router)
+app.include_router(collection_router)
 
 @app.get("/")
 def root():
