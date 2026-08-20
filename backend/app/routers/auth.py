@@ -69,7 +69,6 @@ def student_join(request: StudentJoinRequest):
         "studentToken": student_token,
         "xp": 0,
         "level": 1,
-        "LoginCount": 1,
         "badge": "bronze"
     })
 
