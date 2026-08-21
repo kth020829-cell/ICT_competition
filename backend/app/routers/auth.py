@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.firebase import db
 from app.schemas.auth import StudentJoinRequest
+from google.cloud.firestore_v1 import Increment
 
 
 router = APIRouter(
@@ -62,6 +63,7 @@ def student_join(request: StudentJoinRequest):
 
     # 5. 학생 문서 생성
     student_ref = db.collection("students").document()
+    class_ref = db.collection("classes").document(class_id)
 
     student_ref.set({
         "classId": class_id,
@@ -70,6 +72,10 @@ def student_join(request: StudentJoinRequest):
         "xp": 0,
         "level": 1,
         "badge": "bronze"
+    })
+
+    class_ref.update({
+        "studentCount": Increment(1)
     })
 
     # 6. 응답

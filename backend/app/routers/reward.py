@@ -2,6 +2,8 @@ from fastapi import APIRouter, Header, HTTPException
 from app.firebase import db
 from app.services.collection import collect_card
 
+from google.cloud.firestore_v1 import Increment
+
 router = APIRouter(
     prefix="/rewards",
     tags=["Reward"]
@@ -202,10 +204,19 @@ def give_reward(
         .document(student_id)
     )
 
+    class_ref = (
+        db.collection("classes")
+        .document(student_data.get("classId"))
+    )
+
     student_ref.update({
         "xp": new_xp,
         "level": new_level,
         "badge": badge
+    })
+
+    class_ref.update({
+        "goalCurrent": Increment(1)
     })
 
 
