@@ -1,50 +1,12 @@
-from datetime import datetime, timezone
-
 from fastapi import APIRouter, Header, HTTPException
-
 from app.firebase import db
-
+from app.services.collection import collect_card
 
 router = APIRouter(
     prefix="/rewards",
     tags=["Reward"]
 )
 
-
-# ==========================================
-# 레벨 / 뱃지 계산
-# ==========================================
-
-def calculate_level_and_badge(current_xp: int, current_level: int):
-
-    level = current_level
-    xp = current_xp
-
-    # XP 50 이상일 때마다 레벨업
-    while xp >= 50:
-        xp -= 50
-        level += 1
-
-    # 레벨에 따른 뱃지
-    if level == 1:
-        badge = "BRONZE"
-
-    elif 2 <= level <= 5:
-        badge = "SILVER"
-
-    elif 6 <= level <= 20:
-        badge = "GOLD"
-
-    else:
-        badge = "CHALLENGER"
-
-    return level, xp, badge
-
-
-# ==========================================
-# POST /rewards/{session_id}
-# 보상 지급
-# ==========================================
 
 @router.post("/{session_id}")
 def give_reward(
@@ -118,133 +80,117 @@ def give_reward(
 
 
     # ==========================================
-    # 4. 세션 완료 여부 확인
+    # 4. 세션 완료 확인
     # ==========================================
 
     if session_data.get("status") != "COMPLETED":
         raise HTTPException(
             status_code=400,
-            detail="완료되지 않은 세션에는 보상을 지급할 수 없습니다."
+            detail="완료된 세션만 보상을 받을 수 있습니다."
         )
 
 
     # ==========================================
-    # 5. 이미 보상받았는지 확인
+    # 5. 중복 보상 방지
     # ==========================================
 
-    reward_docs = (
+    reward_transaction_id = f"{session_id}_reward"
+
+    reward_ref = (
         db.collection("rewardTransactions")
-        .where(
-            "sessionId",
-            "==",
-            session_id
-        )
-        .limit(1)
-        .stream()
+        .document(reward_transaction_id)
     )
 
-    existing_rewards = list(reward_docs)
+    reward_doc = reward_ref.get()
 
-    if existing_rewards:
-
-        existing_reward = existing_rewards[0].to_dict()
-
+    if reward_doc.exists:
         return {
             "success": True,
-            "alreadyRewarded": True,
-            "sessionId": session_id,
-            "rewardTransactionId": existing_rewards[0].id,
-            "reward": {
-                "totalXp": existing_reward.get(
-                    "xpEarned",
-                    0
-                )
-            },
-            "student": {
-                "xp": student_data.get("xp", 0),
-                "level": student_data.get("level", 1),
-                "badge": student_data.get(
-                    "badge",
-                    "BRONZE"
-                )
-            },
-            "message": "이미 보상이 지급된 세션입니다."
+            "message": "이미 보상을 지급받은 세션입니다.",
+            "rewardTransactionId": reward_transaction_id
         }
 
 
     # ==========================================
-    # 6. 기본 보상
+    # 6. 기본 XP
     # ==========================================
 
-    base_xp = 10
-
-
-    # ==========================================
-    # 7. After 성공 보상
-    # ==========================================
-
-    after_xp = 0
-
-    after_data = session_data.get("after")
-
-    if after_data:
-        if after_data.get("improved") is True:
-            after_xp = 20
+    xp_gain = 10
 
 
     # ==========================================
-    # 8. 미션 보너스
+    # 7. 미션 보너스
     # ==========================================
 
-    mission_bonus_xp = 0
+    mission_completed = False
 
-    mission_completed = session_data.get(
-        "missionCompleted",
-        False
-    )
+    # TODO:
+    # 나중에 미션 판정 로직 연결
+    #
+    # mission_completed = check_mission(...)
 
     if mission_completed:
-        mission_bonus_xp = 30
+        xp_gain += 30
 
 
     # ==========================================
-    # 9. 총 보상 XP
+    # 8. 현재 XP
     # ==========================================
 
-    total_reward_xp = (
-        base_xp
-        + after_xp
-        + mission_bonus_xp
-    )
+    current_xp = student_data.get("xp", 0)
+
+    new_xp = current_xp + xp_gain
 
 
     # ==========================================
-    # 10. 현재 학생 XP / 레벨
+    # 9. 레벨 계산
     # ==========================================
 
-    current_xp = student_data.get(
-        "xp",
-        0
-    )
-
-    current_level = student_data.get(
-        "level",
-        1
-    )
+    new_level = (new_xp // 50) + 1
 
 
     # ==========================================
-    # 11. XP 추가 + 레벨 + 뱃지 계산
+    # 10. 뱃지 계산
     # ==========================================
 
-    new_xp = current_xp + total_reward_xp
+    if new_level >= 20:
+        badge = "CHALLENGER"
 
-    new_level, remaining_xp, new_badge = (
-        calculate_level_and_badge(
-            new_xp,
-            current_level
+    elif new_level >= 5:
+        badge = "GOLD"
+
+    elif new_level >= 2:
+        badge = "SILVER"
+
+    else:
+        badge = "BRONZE"
+
+
+    # ==========================================
+    # 11. 도감 자동 수집
+    # ==========================================
+
+    collection_result = {
+        "registered": False,
+        "cardId": None,
+        "isNew": False,
+        "count": 0
+    }
+
+    result_data = session_data.get("result")
+
+    if result_data:
+
+        detected_class = result_data.get(
+            "detectedClass"
         )
-    )
+
+        if detected_class:
+
+            collection_result = collect_card(
+                student_id=student_id,
+                detected_class=detected_class
+            )
 
 
     # ==========================================
@@ -257,77 +203,44 @@ def give_reward(
     )
 
     student_ref.update({
-        "xp": remaining_xp,
+        "xp": new_xp,
         "level": new_level,
-        "badge": new_badge
+        "badge": badge
     })
 
 
     # ==========================================
-    # 13. 보상 거래 ID 생성
+    # 13. 보상 거래 기록
     # ==========================================
 
-    reward_transaction_ref = (
-        db.collection("rewardTransactions")
-        .document()
-    )
-
-    reward_transaction_id = (
-        reward_transaction_ref.id
-    )
-
-
-    # ==========================================
-    # 14. 보상 기록 저장
-    # ==========================================
-
-    reward_data = {
+    reward_ref.set({
         "studentId": student_id,
         "sessionId": session_id,
-
-        "rewardTransactionId":
-            reward_transaction_id,
-
-        "baseXp": base_xp,
-        "afterXp": after_xp,
-        "missionBonusXp": mission_bonus_xp,
-
-        "xpEarned": total_reward_xp,
-
-        "createdAt":
-            datetime.now(timezone.utc)
-    }
-
-    reward_transaction_ref.set(
-        reward_data
-    )
+        "xp": xp_gain,
+        "missionCompleted": mission_completed,
+        "rewardTransactionId": reward_transaction_id
+    })
 
 
     # ==========================================
-    # 15. 최종 응답
+    # 14. 응답
     # ==========================================
 
     return {
         "success": True,
-        "alreadyRewarded": False,
-
         "sessionId": session_id,
-
-        "rewardTransactionId":
-            reward_transaction_id,
+        "rewardTransactionId": reward_transaction_id,
 
         "reward": {
-            "baseXp": base_xp,
-            "afterXp": after_xp,
-            "missionBonusXp": mission_bonus_xp,
-            "totalXp": total_reward_xp
+            "xp": xp_gain,
+            "missionCompleted": mission_completed
         },
 
         "student": {
-            "xp": remaining_xp,
+            "xp": new_xp,
             "level": new_level,
-            "badge": new_badge
+            "badge": badge
         },
 
-        "message": "보상이 지급되었습니다."
+        "collection": collection_result
     }
