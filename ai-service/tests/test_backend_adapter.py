@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import io
+import logging
 
 import pytest
 from fastapi.testclient import TestClient
@@ -15,8 +16,14 @@ from pydantic import BaseModel
 
 from app.main import app
 from app.mocks import scenarios
-from app.schemas.enums import AnalysisStatus, Phase
+from app.schemas.enums import (
+    ITEM_TO_CARD_TYPE,
+    ITEM_TO_CLASS,
+    AnalysisStatus,
+    Phase,
+)
 from app.schemas.request import AnalyzeRequest
+from app.schemas.response import Detection
 from app.services import backend_adapter
 
 
@@ -61,7 +68,10 @@ def test_response_fits_backend_session_result_request(client):
 
     parsed = SessionResultRequest(**body)  # 부가 필드는 pydantic이 무시한다
 
-    assert parsed.detectedClass == "pet"
+    # detectedClass 는 클래스(pet)가 아니라 Firestore card 의 type 이다.
+    # 백엔드 collect_card() 가 `type == detectedClass` 로 카드를 찾는다.
+    assert parsed.detectedClass == "transparency_plastic_bottle"
+    assert body["classCode"] == "pet"
     assert parsed.needsAction is True
     assert parsed.actions == ["라벨 떼기", "납작하게 누르기"]
     assert parsed.disposalCategory == "CLEAR_PET_BIN"
@@ -207,3 +217,50 @@ def test_every_scenario_converts(name):
     assert 0.0 <= parsed.confidence <= 1.0
     assert len(result.actions) == len(result.action_codes)
     assert result.ai_status in set(AnalysisStatus)
+
+
+# --------------------------------------------------------------------------
+# 도감 카드 매핑 — 백엔드 collect_card() 가 `type == detectedClass` 로 찾는다
+# --------------------------------------------------------------------------
+def test_every_encyclopedia_item_maps_to_a_card_type():
+    """VLM이 낼 수 있는 품목은 전부 카드 type 이 있어야 한다.
+
+    빠지면 그 품목만 도감에 조용히 등록되지 않는다. 판정은 정상으로 보여서
+    발견이 늦다.
+    """
+    missing = [item for item in ITEM_TO_CLASS if item not in ITEM_TO_CARD_TYPE]
+    assert missing == [], f"카드 type 이 없는 품목: {missing}"
+
+
+def test_card_types_are_unique_except_merged_paper():
+    """도감이 신문지·공책을 한 장으로 묶은 것 말고는 1:1이어야 한다."""
+    seen: dict[str, list[str]] = {}
+    for item, card in ITEM_TO_CARD_TYPE.items():
+        seen.setdefault(card, []).append(item)
+
+    shared = {c: items for c, items in seen.items() if len(items) > 1}
+    assert shared == {"newspaper&notebook": ["신문지", "공책"]}, shared
+
+
+def test_card_type_falls_back_to_class_when_item_unknown(caplog):
+    """도감에 없는 품목이 오면 클래스로 떨어지되 조용하지 않아야 한다."""
+    detection = Detection(
+        classCode="pet", classNameKo="페트병", itemNameKo="존재하지 않는 물건",
+        confidence=0.5,
+    )
+    with caplog.at_level(logging.WARNING):
+        assert backend_adapter.card_type_for(detection) == "pet"
+    assert "매핑에 없는 품목" in caplog.text
+
+
+def test_card_type_uses_item_not_class(client):
+    """같은 pet 클래스라도 품목이 다르면 카드가 달라야 한다."""
+    a = post(client, mockScenario="pet_action_required").json()
+    assert a["detectedClass"] == "transparency_plastic_bottle"
+    assert a["classCode"] == "pet"
+
+
+def test_rejected_has_no_card_type(client):
+    """거부된 판정으로 카드를 주면 안 된다."""
+    body = post(client, mockScenario="face_detected").json()
+    assert body["detectedClass"] == ""

@@ -272,7 +272,7 @@ curl -X POST http://localhost:8001/v1/analyze/session \
 
 ```json
 {
-  "detectedClass": "pet",
+  "detectedClass": "transparency_plastic_bottle",
   "confidence": 0.604,
   "needsAction": true,
   "actions": ["내용물 비우기", "라벨 떼기", "납작하게 누르기"],
@@ -281,6 +281,7 @@ curl -X POST http://localhost:8001/v1/analyze/session \
 
   "analysisId": "analysis_01M0CHG3AYRE9NC2",
   "actionCodes": ["EMPTY_CONTENT", "REMOVE_LABEL", "CRUSH"],
+  "classCode": "pet",
   "aiStatus": "ACTION_REQUIRED",
   "improved": null,
   "remainingActions": [],
@@ -292,10 +293,16 @@ curl -X POST http://localhost:8001/v1/analyze/session \
 위 6개가 `SessionResultRequest`와 1:1이고, 아래는 부가 정보다. pydantic v2가
 모르는 키를 무시하므로 그냥 넘겨도 된다.
 
+> **`detectedClass`는 Firestore `card` 컬렉션의 `type`이다.** 백엔드
+> `collect_card()`가 `card`에서 `type == detectedClass`로 카드를 찾아 학생
+> 도감에 등록하므로, 클래스(`pet`/`can`/…)가 아니라 **품목 단위 카드 type**을
+> 싣는다. 클래스가 필요하면 `classCode`를 쓴다.
+
 | 부가 필드 | 왜 필요한가 |
 |---|---|
 | `analysisId` | **세션 문서에 저장해야 한다.** 재촬영 때 `beforeAnalysisId`로 되돌려주지 않으면 개선 여부를 계산할 수 없다 |
 | `actionCodes` | 미션·뱃지 판정용. `actions`(한글)와 순서가 같다. 한글 라벨로 판정하면 문구가 바뀔 때 깨진다 |
+| `classCode` | AI 7종 클래스. `detectedClass`가 품목 단위라 클래스 정보를 따로 싣는다. 도감 카드의 `class` 필드와는 어휘가 다르다 (카드는 `general`·`battery`를 쓰고 `glass`가 없다) |
 | `aiStatus` | 백엔드 3종으로 표현되지 않는 `IMPROVED` / `PARTIALLY_IMPROVED` / `REJECTED` 등 |
 | `improved` | `AFTER`에서만 채워진다. **보상의 근거는 이 값이지 클라이언트가 보낸 값이 아니다** |
 | `remainingActions` | `AFTER`에서 아직 남은 행동 |
@@ -312,6 +319,23 @@ curl -X POST http://localhost:8001/v1/analyze/session \
 
 > 백엔드 양식에는 `states` · `boundingBox` · `processing` 자리가 없다.
 > 그 값들이 필요해지면 `/v1/analyze`를 쓴다.
+
+#### 도감 카드 매핑
+
+`app/schemas/enums.py`의 `ITEM_TO_CARD_TYPE`이 도감 29종을 Firestore `card`의
+`type`으로 옮긴다. 값은 실제 컬렉션 26장을 읽어 맞춘 것이라 임의로 바꾸면 안 된다.
+
+**카드가 아직 없는 품목 2종.** AI는 판정할 수 있는데 `card` 문서가 없다.
+`collect_card()`가 `registered: false`로 조용히 넘어가므로 판정은 동작하지만
+도감에 등록되지 않는다. 아래 `type`으로 카드를 추가하면 코드 수정 없이 걸린다.
+
+| 품목 | 필요한 `type` |
+|---|---|
+| 유리병 | `glass_bottle` |
+| 페트병 뚜껑 | `bottle_cap` |
+
+도감은 신문지와 공책을 `newspaper&notebook` 한 장으로 묶었다. AI는 둘을 따로
+판정하지만 같은 카드로 보낸다.
 
 ---
 

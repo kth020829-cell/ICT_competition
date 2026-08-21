@@ -164,6 +164,9 @@ class SessionResult(CamelModel):
     """
 
     # --- 백엔드 SessionResultRequest 와 1:1 ---
+    #: **Firestore `card` 컬렉션의 `type` 이다.** 백엔드 `collect_card()` 가
+    #: `card` 에서 `type == detectedClass` 로 카드를 찾아 학생 도감에 등록한다.
+    #: 그래서 클래스(pet/can/…)가 아니라 품목 단위 카드 type 을 싣는다.
     detected_class: str = Field(alias="detectedClass")
     confidence: float = Field(ge=0.0, le=1.0)
     needs_action: bool = Field(alias="needsAction")
@@ -179,6 +182,11 @@ class SessionResult(CamelModel):
     #: 미션·뱃지 판정용 행동 코드. 명세서 §2가 "백엔드는 이 코드로 미션과
     #: 뱃지를 판정한다"고 못박은 그 코드다. actions(한글)와 순서가 같다.
     action_codes: list[str] = Field(default_factory=list, alias="actionCodes")
+    #: AI 7종 클래스(pet/plastic/can/glass/pack/paper/vinyl). detectedClass가
+    #: 품목 단위로 바뀌면서 클래스 정보가 사라지지 않게 따로 싣는다.
+    #: 도감 카드의 `class` 필드와는 어휘가 다르다 — 카드는 general·battery를
+    #: 쓰고 glass가 없다.
+    class_code: str = Field(default="", alias="classCode")
     #: AI 원본 상태. 백엔드 3종(ACTION_REQUIRED/COMPLETED/CREATED)으로는
     #: 표현되지 않는 IMPROVED·PARTIALLY_IMPROVED·REJECTED 등이 그대로 실린다.
     ai_status: AnalysisStatus = Field(alias="aiStatus")
