@@ -253,6 +253,66 @@ ITEM_TO_CLASS: dict[str, str | None] = {
     "부러진 연필": None,
 }
 
+# --------------------------------------------------------------------------
+# 도감 품목 → Firestore `card` 컬렉션의 `type` (백엔드 연동)
+# --------------------------------------------------------------------------
+#
+# 백엔드 `collect_card()` 가 `card` 에서 `type == detectedClass` 로 카드를 찾아
+# 학생 도감에 등록한다. 그래서 백엔드로 나가는 detectedClass 는 YOLO 클래스가
+# 아니라 **이 카드 type** 이어야 한다. 클래스(pet/can/…)를 보내면 카드가 하나도
+# 안 걸린다.
+#
+# 값은 Firestore `card` 컬렉션 26장을 그대로 읽어 맞춘 것이다. 임의로 짓지 않는다.
+ITEM_TO_CARD_TYPE: dict[str, str] = {
+    # pet
+    "투명 페트병": "transparency_plastic_bottle",
+    "플라스틱 음료병": "plastic_bottle",
+    # plastic
+    "배달 플라스틱 용기": "delivery_plastic_container",
+    "칫솔": "toothbrush",
+    "빨대": "straw",
+    "샤프심통": "pencil_lead_case",
+    "볼펜": "pen",
+    # can
+    "알루미늄캔": "aluminum_can",
+    "철캔": "iron_can",
+    # pack
+    "우유팩": "milk_pack",
+    # paper
+    "택배상자": "box",
+    # 도감은 신문지와 공책을 한 장으로 묶었다. AI는 둘을 따로 판정하므로
+    # 같은 카드로 보낸다.
+    "신문지": "newspaper&notebook",
+    "공책": "newspaper&notebook",
+    "계란판": "egg_carton",
+    "영수증": "receipt",
+    "코팅지": "coated_paper",
+    "스프링노트": "spring_notebook",
+    "컵라면 종이용기": "noodle_paper_container",
+    # vinyl
+    "과자봉지": "snack_vinyl",
+    "에어캡": "aircap",
+    "페트병 라벨": "bottle_label",
+    "아이스크림 포장지": "icecream_cover",
+    "오염된 비닐": "contaminated_vinyl",
+    # 기타 (VLM 단독)
+    "건전지": "battery",
+    "아이스팩": "ice_pack",
+    "나무젓가락": "wood_chopstick",
+    "부러진 연필": "pencil",
+    # --- 아직 Firestore `card` 에 문서가 없는 품목 -------------------------
+    # AI는 이 둘을 판정할 수 있는데 카드가 없다. 카드가 없으면 백엔드
+    # collect_card() 가 registered=False 로 조용히 넘어가므로 판정 자체는
+    # 동작하지만 도감에 등록되지 않는다. 카드를 아래 type으로 추가하면
+    # 코드 수정 없이 바로 걸린다.
+    "유리병": "glass_bottle",
+    "페트병 뚜껑": "bottle_cap",
+}
+
+#: 아직 카드가 없는 품목. 도감 등록이 안 되므로 백엔드에 알려야 한다.
+CARD_TYPES_NOT_IN_FIRESTORE: frozenset[str] = frozenset({"glass_bottle", "bottle_cap"})
+
+
 #: 검출 단계를 건너뛰고 VLM에 원본을 직접 넘기는 품목.
 #: 배출 결론이 상태와 무관하게 고정이라 검출이 의미 없다. (지시서 §3)
 VLM_ONLY_ITEMS: frozenset[str] = frozenset(

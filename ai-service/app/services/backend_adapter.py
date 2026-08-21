@@ -13,8 +13,8 @@ from __future__ import annotations
 
 import logging
 
-from app.schemas.enums import ACTION_LABEL_KO, AnalysisStatus
-from app.schemas.response import AnalyzeResponse, SessionResult
+from app.schemas.enums import ACTION_LABEL_KO, ITEM_TO_CARD_TYPE, AnalysisStatus
+from app.schemas.response import AnalyzeResponse, Detection, SessionResult
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +23,29 @@ _IMPROVED_STATUSES = {AnalysisStatus.IMPROVED, AnalysisStatus.COMPLETED}
 
 #: 판정이 성립하지 않은 상태. 품목·배출 분류가 없다.
 _FAILED_STATUSES = {AnalysisStatus.REJECTED, AnalysisStatus.FAILED}
+
+
+def card_type_for(detection: Detection) -> str:
+    """백엔드 `card` 컬렉션의 `type` 을 고른다.
+
+    백엔드 `collect_card()` 가 `card` 에서 `type == detectedClass` 로 카드를
+    찾으므로, detectedClass 는 클래스(pet/can/…)가 아니라 품목 단위 카드
+    type 이어야 한다.
+
+    품목을 못 고른 경우에만 클래스 코드로 떨어진다. 그 값으로는 카드가 걸리지
+    않지만(백엔드가 registered=False 로 조용히 넘어간다), 빈 문자열보다는
+    무엇을 봤는지 남는 편이 낫다.
+    """
+    item = detection.item_name_ko
+    if item:
+        card_type = ITEM_TO_CARD_TYPE.get(item)
+        if card_type:
+            return card_type
+        # VLM enum과 rag.resolve()가 도감 밖 품목을 막으므로 보통 오지 않는다.
+        # 오면 도감과 매핑표가 어긋난 것이므로 조용히 넘기지 않는다.
+        logger.warning("도감 카드 매핑에 없는 품목: %r", item)
+
+    return detection.class_code or ""
 
 
 def to_session_result(response: AnalyzeResponse) -> SessionResult:
@@ -64,7 +87,8 @@ def to_session_result(response: AnalyzeResponse) -> SessionResult:
         remaining_labels = _labels(remaining_codes)
 
         return SessionResult(
-            detectedClass=detection.class_code or "",
+            detectedClass=card_type_for(detection),
+            classCode=detection.class_code or "",
             confidence=detection.confidence,
             needsAction=bool(remaining_codes),
             actions=remaining_labels,
@@ -83,7 +107,8 @@ def to_session_result(response: AnalyzeResponse) -> SessionResult:
     codes = [str(a.code) for a in response.required_actions]
 
     return SessionResult(
-        detectedClass=detection.class_code or "",
+        detectedClass=card_type_for(detection),
+        classCode=detection.class_code or "",
         confidence=detection.confidence,
         needsAction=bool(codes),
         # label_ko 가 이미 응답에 실려 있으므로 그걸 쓴다. 표를 다시 뒤지면
