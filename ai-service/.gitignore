@@ -11,7 +11,7 @@ __pycache__/
 app/models/weights/*.pt
 app/models/weights/*.onnx
 
-# 동결 평가셋 사진은 용량이 커서(50장 125MB) git에 올리지 않는다.
+# 동결 평가셋 사진은 용량이 커서(92장 231MB) git에 올리지 않는다.
 # 팀 드라이브로 공유하고 eval_frozen/images/ 에 풀어서 쓴다.
 # 라벨 CSV는 커밋한다 — 그게 평가의 기준이다.
 eval_frozen/images/*
