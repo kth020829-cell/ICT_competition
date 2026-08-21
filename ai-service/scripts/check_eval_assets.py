@@ -21,8 +21,13 @@ CSV_PATH = BASE_DIR / "eval_frozen" / "eval_frozen_labels.csv"
 IMAGES_DIR = BASE_DIR / "eval_frozen" / "images"
 
 #: 지시서 §7.1 — 동결 평가셋의 목표 규모.
-TARGET_TOTAL = 110
-TARGET_BY_PHASE = {"before": 41, "after": 41, "single": 28}
+#:
+#: 원래 110행(before 41 / after 41 / single 28)이었다. 우유팩과 플라스틱 음료병
+#: before/after 20행은 촬영하지 못해 평가셋에서 뺐다. 두 품목 모두 도감과 AI
+#: 판정에는 그대로 남아 있고, 정확도를 측정할 사진이 없다는 뜻일 뿐이다.
+#: 사진을 찍으면 행을 되살리고 이 값도 되돌린다.
+TARGET_TOTAL = 90
+TARGET_BY_PHASE = {"before": 31, "after": 31, "single": 28}
 
 #: 지시서 §10 — 클라이언트가 긴 변 1024px로 리사이즈해 업로드한다.
 #: 평가도 같은 조건으로 해야 숫자가 실제 서비스와 맞는다.
