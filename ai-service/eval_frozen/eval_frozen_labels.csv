@@ -81,9 +81,9 @@ receipt (1).jpeg,영수증,paper,,single,-,일반쓰레기,태현,O,
 receipt (2).jpeg,영수증,paper,,single,-,일반쓰레기,태현,O,
 receipt (3).jpeg,영수증,paper,,single,-,일반쓰레기,태현,O,
 receipt (4).jpeg,영수증,paper,,single,-,일반쓰레기,태현,O,
-coated (1).jpeg,코팅지(라미네이팅),paper,,single,,일반쓰레기,태현,O,정면반사
+coated (3).jpeg,코팅지(라미네이팅),paper,,single,,일반쓰레기,태현,O,정면반사
 coated (1).jpg,코팅지(라미네이팅),paper,,single,,일반쓰레기,태현,O,정면반사
-coated (1).png,코팅지(라미네이팅),paper,,single,,일반쓰레기,태현,O,정면반사
+coated (4).png,코팅지(라미네이팅),paper,,single,,일반쓰레기,태현,O,정면반사
 coated (2).jpg,코팅지(라미네이팅),paper,,single,,일반쓰레기,태현,O,구부림
 icepack (1).jpeg,아이스팩,(폴백),,single,젤 타입,일반쓰레기(통째로),태현,O,YOLO 미대응 → VLM 단독 / 분기 UI 필요
 icepack (2).jpeg,아이스팩,(폴백),,single,젤 타입,일반쓰레기(통째로),태현,O,YOLO 미대응 → VLM 단독 / 분기 UI 필요
