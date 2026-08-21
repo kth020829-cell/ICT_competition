@@ -7,9 +7,9 @@ from app.routers.session import router as session_router
 from app.routers.reward import router as reward_router
 from app.routers.mission import router as mission_router
 from app.routers.collection import router as collection_router
+from app.routers.teacher import router as teacher_router
 
 app = FastAPI()
-
 
 app.include_router(auth_router)
 app.include_router(student_router)
@@ -18,6 +18,7 @@ app.include_router(session_router)
 app.include_router(reward_router)
 app.include_router(mission_router)
 app.include_router(collection_router)
+app.include_router(teacher_router)
 
 @app.get("/")
 def root():
