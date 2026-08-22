@@ -365,92 +365,77 @@ def get_session_result(
 # After 결과 저장
 # ==========================================
 
-@router.post("/{session_id}/after")
-async def upload_after_image(
+def analyze_after(
     session_id: str,
-    background_tasks: BackgroundTasks,
-    file: UploadFile = File(...),
-    student_token: str | None = Header(default=None)
-):
+    image_data: bytes,
+    filename: str,
+    content_type: str,
+    before_analysis_id: str
+    ):
+    try:
 
-    # 1. 학생 인증
-    if not student_token:
-        raise HTTPException(
-            status_code=401,
-            detail="학생 인증 토큰이 없습니다."
+        response = httpx.post(
+            f"{AI_SERVER_URL}/v1/analyze/session",
+            data={
+                "scanSessionId": session_id,
+                "phase": "AFTER",
+                "beforeAnalysisId": before_analysis_id
+            },
+            files={
+                "image": (
+                    filename,
+                    image_data,
+                    content_type
+                )
+            },
+            timeout=30
         )
 
-    students = (
-        db.collection("students")
-        .where(
-            "studentToken",
-            "==",
-            student_token
-        )
-        .limit(1)
-        .stream()
-    )
+        response.raise_for_status()
 
-    student_docs = list(students)
+        ai_data = response.json()
 
-    if not student_docs:
-        raise HTTPException(
-            status_code=401,
-            detail="유효하지 않은 학생 토큰입니다."
+        improved = ai_data.get(
+            "improved",
+            False
         )
 
-    student_id = student_docs[0].id
-
-    # 2. 세션 확인
-    session_ref = (
-        db.collection("sessions")
-        .document(session_id)
-    )
-
-    session_doc = session_ref.get()
-
-    if not session_doc.exists:
-        raise HTTPException(
-            status_code=404,
-            detail="존재하지 않는 세션입니다."
+        remaining_actions = ai_data.get(
+            "remainingActions",
+            []
         )
 
-    session_data = session_doc.to_dict()
-
-    # 3. 세션 소유자 확인
-    if session_data.get("studentId") != student_id:
-        raise HTTPException(
-            status_code=403,
-            detail="이 세션에 접근할 권한이 없습니다."
+        session_ref = (
+            db.collection("sessions")
+            .document(session_id)
         )
 
-    # 4. Action이 필요한 세션인지 확인
-    if session_data.get("status") != "ACTION_REQUIRED":
-        raise HTTPException(
-            status_code=400,
-            detail="After 촬영이 필요한 세션이 아닙니다."
+        if improved:
+            status = "COMPLETED"
+        else:
+            status = "ACTION_REQUIRED"
+
+        session_ref.update({
+            "status": status,
+            "after": {
+                "improved": improved,
+                "remainingActions": remaining_actions
+            }
+        })
+
+    except Exception as e:
+
+        print(
+            f"[AI AFTER ERROR] session={session_id}: {e}"
         )
 
+        db.collection("sessions").document(
+            session_id
+        ).update({
+            "status": "AI_FAILED",
+            "aiError": str(e)
+        })
 
-    # 6. 개선 여부에 따른 상태 결정
-    if request.improved:
-        status = "COMPLETED"
-    else:
-        status = "ACTION_REQUIRED"
-
-    # 7. Firestore 저장
-    session_ref.update({
-        "after": after_data,
-        "status": status
-    })
-
-    # 8. 응답
-    return {
-        "success": True,
-        "sessionId": session_id,
-        "status": status,
-        "improved": request.improved
-    }
 
 @router.post("/{session_id}/after")
 async def upload_after_image(

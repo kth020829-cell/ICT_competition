@@ -7,14 +7,15 @@ def collect_card(
     student_id: str,
     detected_class: str
 ):
+
     # ==========================================
-    # 1. AI가 판정한 쓰레기 종류로 카드 찾기
+    # 1. 카드 검색
     # ==========================================
 
     cards = (
-        db.collection("cards")
+        db.collection("card")
         .where(
-            "class",
+            "type",
             "==",
             detected_class
         )
@@ -24,7 +25,6 @@ def collect_card(
 
     card_docs = list(cards)
 
-    # 카드가 존재하지 않는 경우
     if not card_docs:
         return {
             "registered": False,
@@ -39,7 +39,7 @@ def collect_card(
 
 
     # ==========================================
-    # 2. 학생의 도감에서 카드 확인
+    # 2. 학생 도감 확인
     # ==========================================
 
     collection_ref = (
@@ -53,7 +53,7 @@ def collect_card(
 
 
     # ==========================================
-    # 3. 처음 발견한 카드
+    # 3. 최초 수집
     # ==========================================
 
     if not collection_doc.exists:
@@ -73,25 +73,23 @@ def collect_card(
 
 
     # ==========================================
-    # 4. 이미 발견한 카드
+    # 4. 이미 수집한 카드
     # ==========================================
 
     collection_data = collection_doc.to_dict()
 
-    current_count = collection_data.get(
+    count = collection_data.get(
         "count",
         0
-    )
-
-    new_count = current_count + 1
+    ) + 1
 
     collection_ref.update({
-        "count": new_count
+        "count": count
     })
 
     return {
         "registered": True,
         "cardId": card_id,
         "isNew": False,
-        "count": new_count
+        "count": count
     }
