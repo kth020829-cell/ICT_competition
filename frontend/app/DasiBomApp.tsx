@@ -22,6 +22,12 @@ import {
   type AnalysisMode,
 } from "./P2Features";
 import { useOnlineStatus, useScanRecovery, useServiceWorker } from "./useResilience";
+import { apiConfig } from "../lib/api/config";
+import { apiErrorMessage, toScanAnalysis } from "../lib/api/adapters";
+import { collectionApi, missionApi, scanApi, studentApi, teacherApi } from "../lib/api/services";
+import { studentSessionStore, teacherSessionStore, type StudentSession, type TeacherSession } from "../lib/api/session";
+import { imageUrlToBlob, pollAnalysis } from "../lib/api/workflows";
+import type { CollectionResponse, HomeResponse, Mission, RewardResponse, TeacherClassResponse } from "../lib/api/contracts";
 
 const DEMO_CODE = "4B7K2M";
 
@@ -91,17 +97,17 @@ function Welcome({ onStart, onTeacher }: { onStart: () => void; onTeacher: () =>
   );
 }
 
-function Join({ onBack, onSuccess }: { onBack: () => void; onSuccess: () => void }) {
+function Join({ onBack, onSuccess }: { onBack: () => void; onSuccess: (code: string) => void }) {
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
-    if (code.toUpperCase() !== DEMO_CODE) {
+    if (apiConfig.enableMock && code.toUpperCase() !== DEMO_CODE) {
       setError(`체험 코드는 ${DEMO_CODE}예요.`);
       return;
     }
-    onSuccess();
+    onSuccess(code.toUpperCase());
   };
 
   return (
@@ -116,7 +122,7 @@ function Join({ onBack, onSuccess }: { onBack: () => void; onSuccess: () => void
         <div className="auth-icon">🏫</div>
         <p className="eyebrow">우리 반에 들어가기</p>
         <h1>선생님이 알려준<br />참여 코드를 입력해줘</h1>
-        <p>영문과 숫자로 된 6자리 코드야.</p>
+        <p>영문 또는 숫자로 된 6자리 코드야.</p>
         <form onSubmit={submit}>
           <label htmlFor="class-code">학급 참여 코드</label>
           <input
@@ -143,8 +149,23 @@ function Join({ onBack, onSuccess }: { onBack: () => void; onSuccess: () => void
   );
 }
 
-function Nickname({ onComplete }: { onComplete: (nickname: string) => void }) {
+function Nickname({ onComplete }: { onComplete: (nickname: string) => Promise<void> }) {
   const [nickname, setNickname] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (nickname.trim().length < 2 || submitting) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      await onComplete(nickname.trim());
+    } catch (reason) {
+      setError(apiErrorMessage(reason));
+    } finally {
+      setSubmitting(false);
+    }
+  };
   return (
     <main className="auth-screen">
       <header className="simple-header"><span /><Brand compact /><span /></header>
@@ -154,7 +175,7 @@ function Nickname({ onComplete }: { onComplete: (nickname: string) => void }) {
         <p className="eyebrow">마지막 준비</p>
         <h1>어떻게 불러주면 될까?</h1>
         <p>진짜 이름 대신 나만의 별명을 만들어보자.</p>
-        <form onSubmit={(event) => { event.preventDefault(); if (nickname.trim().length >= 2) onComplete(nickname.trim()); }}>
+        <form onSubmit={submit}>
           <label htmlFor="nickname">나의 별명</label>
           <input
             id="nickname"
@@ -164,28 +185,32 @@ function Nickname({ onComplete }: { onComplete: (nickname: string) => void }) {
             autoComplete="off"
           />
           <div className="input-meta"><span>2~10글자로 입력해줘</span><span>{nickname.length}/10</span></div>
-          <button className="primary-button" disabled={nickname.trim().length < 2}>탐험 시작하기</button>
+          {error && <p className="form-error" role="alert">{error}</p>}
+          <button className="primary-button" disabled={nickname.trim().length < 2 || submitting}>{submitting ? "우리 반에 들어가는 중…" : "탐험 시작하기"}</button>
         </form>
       </section>
     </main>
   );
 }
 
-function AppHeader({ nickname, onHome, onSettings }: { nickname: string; onHome: () => void; onSettings?: () => void }) {
+function AppHeader({ nickname, onHome, onSettings, homeData }: { nickname: string; onHome: () => void; onSettings?: () => void; homeData?: HomeResponse | null }) {
   return (
     <header className="app-header">
       <button className="brand-button" onClick={onHome}><Brand compact /></button>
       <div className="header-stats">
-        <span>🌱 Lv. 3</span><span>⭐ 180 XP</span><button className="profile-button" onClick={onSettings} aria-label="설정 열기">{nickname.slice(0, 1)}</button>
+        <span>🌱 Lv. {homeData?.student.level ?? 3}</span><span>⭐ {homeData?.student.xp ?? 180} XP</span><button className="profile-button" onClick={onSettings} aria-label="설정 열기">{nickname.slice(0, 1)}</button>
       </div>
     </header>
   );
 }
 
-function Home({ nickname, onScan, onCollection, onMissions, onCharacter, onBadges, onChecklist, onGoal, onSettings }: { nickname: string; onScan: () => void; onCollection: () => void; onMissions: () => void; onCharacter: () => void; onBadges: () => void; onChecklist: () => void; onGoal: () => void; onSettings: () => void }) {
+function Home({ nickname, homeData, mission, onScan, onCollection, onMissions, onCharacter, onBadges, onChecklist, onGoal, onSettings }: { nickname: string; homeData?: HomeResponse | null; mission?: Mission | null; onScan: () => void; onCollection: () => void; onMissions: () => void; onCharacter: () => void; onBadges: () => void; onChecklist: () => void; onGoal: () => void; onSettings: () => void }) {
+  const goalCurrent = homeData?.classGoal.current ?? 312;
+  const goalTarget = homeData?.classGoal.target ?? 500;
+  const goalPercent = goalTarget > 0 ? Math.min(100, goalCurrent / goalTarget * 100) : 0;
   return (
     <main className="app-shell">
-      <AppHeader nickname={nickname} onHome={() => undefined} onSettings={onSettings} />
+      <AppHeader nickname={nickname} homeData={homeData} onHome={() => undefined} onSettings={onSettings} />
       <section className="home-grid">
         <div className="home-main">
           <div className="greeting"><div><p>안녕, {nickname}! 👋</p><h1>오늘은 어떤 쓰레기를<br />새롭게 만나볼까?</h1></div><div className="mini-mascot">•ᴗ•<span>🌱</span></div></div>
@@ -195,26 +220,26 @@ function Home({ nickname, onScan, onCollection, onMissions, onCharacter, onBadge
             <b>→</b>
           </button>
           <button className="section-block clickable-block" onClick={onMissions}>
-            <div className="section-heading"><div><span className="section-icon">⚡</span><div><small>오늘의 보너스</small><h2>라벨 구출 작전</h2></div></div><b className="bonus-chip">XP 2배</b></div>
-            <p>라벨을 떼고 다시 찍어서 성공해보자!</p>
+            <div className="section-heading"><div><span className="section-icon">⚡</span><div><small>오늘의 보너스</small><h2>{mission?.title ?? "라벨 구출 작전"}</h2></div></div><b className="bonus-chip">{mission ? `+${mission.rewardXp} XP` : "XP 2배"}</b></div>
+            <p>{mission?.description ?? "라벨을 떼고 다시 찍어서 성공해보자!"}</p>
             <div className="mission-progress"><span style={{ width: "50%" }} /></div>
             <div className="progress-caption"><span>1 / 2번 성공</span><strong>한 번만 더!</strong></div>
           </button>
           <button className="section-block class-goal clickable-block" onClick={onGoal}>
-            <div className="section-heading"><div><span className="section-icon blue">🤝</span><div><small>4학년 2반 공동 목표</small><h2>우리 반 카드 500장 모으기</h2></div></div><strong>312장</strong></div>
-            <div className="class-progress"><span style={{ width: "62.4%" }} /></div>
-            <p>188장 더 모으면 나무 심기 인증서를 받아요!</p>
+            <div className="section-heading"><div><span className="section-icon blue">🤝</span><div><small>우리 반 공동 목표</small><h2>우리 반 카드 {goalTarget}장 모으기</h2></div></div><strong>{goalCurrent}장</strong></div>
+            <div className="class-progress"><span style={{ width: `${goalPercent}%` }} /></div>
+            <p>{Math.max(0, goalTarget - goalCurrent)}장 더 모으면 목표를 달성해요!</p>
           </button>
         </div>
         <aside className="home-side">
           <button className="character-card" onClick={onCharacter}>
             <div className="level-pill">LEVEL 3</div>
             <div className="side-mascot"><span>🌱</span><b>•ᴗ•</b></div>
-            <h2>새싹 봄이</h2><p>다음 성장까지 70 XP</p>
-            <div className="xp-progress"><span style={{ width: "64%" }} /></div>
-            <div className="xp-label"><span>180</span><span>250 XP</span></div>
+            <h2>새싹 봄이</h2><p>다음 성장까지 {Math.max(0, (homeData?.student.nextLevelXp ?? 250) - (homeData?.student.xp ?? 180))} XP</p>
+            <div className="xp-progress"><span style={{ width: `${Math.min(100, (homeData?.student.xp ?? 180) / (homeData?.student.nextLevelXp ?? 250) * 100)}%` }} /></div>
+            <div className="xp-label"><span>{homeData?.student.xp ?? 180}</span><span>{homeData?.student.nextLevelXp ?? 250} XP</span></div>
           </button>
-          <button className="menu-card" onClick={onCollection}><span>📚</span><div><strong>헷갈림 도감</strong><small>3 / 30종 발견</small></div><b>→</b></button>
+          <button className="menu-card" onClick={onCollection}><span>📚</span><div><strong>헷갈림 도감</strong><small>{homeData?.collection.collected ?? 3} / {homeData?.collection.total ?? 30}종 발견</small></div><b>→</b></button>
           <button className="menu-card" onClick={onBadges}><span>🏅</span><div><strong>나의 뱃지</strong><small>2개 획득</small></div><b>→</b></button>
           <button className="menu-card" onClick={onChecklist}><span>🏫</span><div><strong>우리 학교 살펴보기</strong><small>5문항 체크리스트</small></div><b>→</b></button>
         </aside>
@@ -276,16 +301,20 @@ function PhotoPreview({ image, phase, onRetake, onUse }: { image: string; phase:
   );
 }
 
-function Analysis({ phase, mode, onDone, onRetry, onHome }: { phase: "before" | "after"; mode: AnalysisMode; onDone: (result: ScanAnalysis) => void; onRetry: () => void; onHome: () => void }) {
+function Analysis({ phase, mode, run, onDone, onRetry, onHome }: { phase: "before" | "after"; mode: AnalysisMode; run?: () => Promise<ScanAnalysis>; onDone: (result: ScanAnalysis) => void; onRetry: () => void; onHome: () => void }) {
   const [stage, setStage] = useState(0);
   useEffect(() => {
     const first = window.setTimeout(() => setStage(1), 900);
+    if (run) {
+      void run().then(onDone).catch(() => setStage(2));
+      return () => window.clearTimeout(first);
+    }
     const second = window.setTimeout(() => {
       if (mode === "timeout") setStage(2);
       else onDone(phase === "before" ? beforeAnalysis : afterAnalysis);
     }, mode === "cached" ? 1100 : 2200);
     return () => { window.clearTimeout(first); window.clearTimeout(second); };
-  }, [mode, onDone, phase]);
+  }, [mode, onDone, phase, run]);
   if (stage === 2) {
     return <AnalysisRecovery onRetry={onRetry} onUseCache={() => onDone(phase === "before" ? beforeAnalysis : afterAnalysis)} onHome={onHome} />;
   }
@@ -314,7 +343,7 @@ function ActionResult({ result, onRetry, onSpeak }: { result: ScanAnalysis; onRe
   );
 }
 
-function Reward({ nickname, onHome, onCollection }: { nickname: string; onHome: () => void; onCollection: () => void }) {
+function Reward({ nickname, reward, onHome, onCollection }: { nickname: string; reward?: RewardResponse | null; onHome: () => void; onCollection: () => void }) {
   const [revealed, setRevealed] = useState(false);
   useEffect(() => { const timer = window.setTimeout(() => setRevealed(true), 450); return () => window.clearTimeout(timer); }, []);
   return (
@@ -323,26 +352,46 @@ function Reward({ nickname, onHome, onCollection }: { nickname: string; onHome: 
       <section className="reward-card">
         <div className="success-mark">✓</div><p className="eyebrow">행동 완성!</p><h1>완벽해, {nickname}!</h1><p>라벨과 뚜껑을 떼고 납작하게 잘 눌렀어.<br />이제 투명 페트병 전용함으로 보내주자!</p>
         <div className={`unlocked-card ${revealed ? "revealed" : ""}`}><span className="rarity">일반 카드</span><div className="card-art">🧴<small>✦</small></div><h2>투명 페트병</h2><p>라벨·뚜껑 분리 완료</p></div>
-        <div className="reward-row"><span><b>+10</b><small>판정 완료</small></span><span><b>+20</b><small>다시 찍기 성공</small></span><span><b>+30</b><small>새 카드 발견</small></span><strong><b>+60 XP</b><small>총 획득</small></strong></div>
+        <div className="reward-row"><span><b>+10</b><small>판정 완료</small></span><span><b>+20</b><small>다시 찍기 성공</small></span><span><b>+{Math.max(0, (reward?.reward.xp ?? 60) - 30)}</b><small>카드·미션</small></span><strong><b>+{reward?.reward.xp ?? 60} XP</b><small>총 획득</small></strong></div>
         <div className="reward-actions"><button className="secondary-button" onClick={onCollection}>도감에서 보기</button><button className="primary-button" onClick={onHome}>홈으로 돌아가기</button></div>
       </section>
     </main>
   );
 }
 
-function Collection({ nickname, onBack }: { nickname: string; onBack: () => void }) {
+function Collection({ nickname, remoteCollection, onBack }: { nickname: string; remoteCollection?: CollectionResponse | null; onBack: () => void }) {
   const [filter, setFilter] = useState<"all" | "chungbuk">("all");
+  const apiCards = remoteCollection?.collections.map((card) => ({
+    id: card.cardId,
+    name: card.name,
+    icon: "♻️",
+    rarity: (card.level >= 3 ? "전설" : card.level === 2 ? "희귀" : "일반") as "일반" | "희귀" | "전설",
+    acquired: card.collected,
+    hint: card.needsActions?.join(" · ") ?? (card.collected ? `${card.count}회 발견` : "아직 발견하지 않은 카드예요"),
+  }));
+  const sourceCards = apiCards?.length ? apiCards : collectionCards;
   const visibleCards = filter === "chungbuk"
     ? collectionCards.filter((card) => ["yeongdong-grape", "goesan-paste", "cheongju-delivery"].includes(card.id))
-    : collectionCards;
+    : sourceCards;
   return (
-    <main className="app-shell"><AppHeader nickname={nickname} onHome={onBack} /><section className="collection-page"><button className="back-link" onClick={onBack}>← 홈으로</button><p className="eyebrow">헷갈림 도감</p><h1>쓰레기를 만날수록<br />도감이 채워져요</h1><p>4 / 30종 발견 · 새 품목을 촬영하면 카드가 열려요.</p><div className="collection-filters"><button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>전체 카드</button><button className={filter === "chungbuk" ? "active" : ""} onClick={() => setFilter("chungbuk")}>💚 충북 특화</button></div><div className="collection-grid">{visibleCards.map((card) => <article key={card.id} className={`collection-item ${card.acquired ? "" : "locked"}`}><span className={`rarity rarity-${card.rarity}`}>{card.rarity}</span><div>{card.acquired ? card.icon : "?"}</div><h2>{card.acquired ? card.name : "아직 비밀"}</h2><p>{card.hint}</p></article>)}</div></section></main>
+    <main className="app-shell"><AppHeader nickname={nickname} onHome={onBack} /><section className="collection-page"><button className="back-link" onClick={onBack}>← 홈으로</button><p className="eyebrow">헷갈림 도감</p><h1>쓰레기를 만날수록<br />도감이 채워져요</h1><p>{remoteCollection?.collectedCount ?? 4} / {remoteCollection?.totalCount ?? 30}종 발견 · 새 품목을 촬영하면 카드가 열려요.</p><div className="collection-filters"><button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>전체 카드</button><button className={filter === "chungbuk" ? "active" : ""} onClick={() => setFilter("chungbuk")}>💚 충북 특화</button></div><div className="collection-grid">{visibleCards.map((card) => <article key={card.id} className={`collection-item ${card.acquired ? "" : "locked"}`}><span className={`rarity rarity-${card.rarity}`}>{card.rarity}</span><div>{card.acquired ? card.icon : "?"}</div><h2>{card.acquired ? card.name : "아직 비밀"}</h2><p>{card.hint}</p></article>)}</div></section></main>
   );
 }
 
 export default function DasiBomApp() {
   const [screen, setScreen] = useState<Screen>("welcome");
   const [nickname, setNickname] = useState("초록탐험가");
+  const [pendingClassCode, setPendingClassCode] = useState(DEMO_CODE);
+  const [studentSession, setStudentSession] = useState<StudentSession | null>(null);
+  const [teacherSession, setTeacherSession] = useState<TeacherSession | null>(null);
+  const [homeData, setHomeData] = useState<HomeResponse | null>(null);
+  const [todayMission, setTodayMission] = useState<Mission | null>(null);
+  const [remoteCollection, setRemoteCollection] = useState<CollectionResponse | null>(null);
+  const [teacherClass, setTeacherClass] = useState<TeacherClassResponse | null>(null);
+  const [scanSessionId, setScanSessionId] = useState<string | null>(null);
+  const [reward, setReward] = useState<RewardResponse | null>(null);
+  const [apiNotice, setApiNotice] = useState("");
+  const [analysisAttempt, setAnalysisAttempt] = useState(0);
   const [image, setImage] = useState("demo");
   const [result, setResult] = useState<ScanAnalysis>(beforeAnalysis);
   const [muted, setMuted] = useState(false);
@@ -354,10 +403,140 @@ export default function DasiBomApp() {
 
   useEffect(() => {
     const saved = window.sessionStorage.getItem("dasibom-nickname");
-    if (!saved) return;
-    const timer = window.setTimeout(() => setNickname(saved), 0);
+    const timer = window.setTimeout(() => {
+      setStudentSession(studentSessionStore.get());
+      setTeacherSession(teacherSessionStore.get());
+      if (saved) setNickname(saved);
+    }, 0);
     return () => window.clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (apiConfig.enableMock || !studentSession || screen !== "home") return;
+    let active = true;
+    void Promise.all([
+      studentApi.home(studentSession.studentToken),
+      missionApi.today(studentSession.studentToken),
+    ]).then(([nextHome, nextMission]) => {
+      if (!active) return;
+      setHomeData(nextHome);
+      setTodayMission(nextMission.mission);
+      setApiNotice("");
+    }).catch((error) => active && setApiNotice(apiErrorMessage(error)));
+    return () => { active = false; };
+  }, [screen, studentSession]);
+
+  useEffect(() => {
+    if (apiConfig.enableMock || !studentSession || screen !== "collection") return;
+    let active = true;
+    void collectionApi.list(studentSession.studentToken)
+      .then((value) => { if (active) setRemoteCollection(value); })
+      .catch((error) => active && setApiNotice(apiErrorMessage(error)));
+    return () => { active = false; };
+  }, [screen, studentSession]);
+
+  useEffect(() => {
+    if (apiConfig.enableMock || !teacherSession || screen !== "teacher-dashboard") return;
+    let active = true;
+    const classId = teacherSession.classId ?? apiConfig.teacherClassId;
+    void Promise.all([
+      teacherApi.classDashboard(teacherSession.teacherId, classId),
+      teacherApi.classCode(teacherSession.teacherId, classId),
+    ]).then(([value, code]) => { if (active) setTeacherClass({ ...value, ...code }); })
+      .catch((error) => active && setApiNotice(apiErrorMessage(error)));
+    return () => { active = false; };
+  }, [screen, teacherSession]);
+
+  const enterStudent = useCallback(async (name: string) => {
+    let nextSession: StudentSession;
+    if (apiConfig.enableMock) {
+      nextSession = {
+        studentId: "demo-student",
+        studentToken: "demo-token",
+        nickname: name,
+        classId: "demo-class",
+        classCode: pendingClassCode,
+      };
+    } else {
+      const response = await studentApi.enter(pendingClassCode, name);
+      nextSession = { ...response, classCode: pendingClassCode };
+    }
+    studentSessionStore.set(nextSession);
+    setStudentSession(nextSession);
+    setNickname(nextSession.nickname);
+    window.sessionStorage.setItem("dasibom-nickname", nextSession.nickname);
+    setScreen("home");
+  }, [pendingClassCode]);
+
+  const runLiveAnalysis = useCallback(async (phase: "before" | "after") => {
+    if (!studentSession) throw new Error("학생 인증이 필요해요. 다시 입장해주세요.");
+    if (phase === "before") {
+      const blob = await imageUrlToBlob(image);
+      const session = await scanApi.create(studentSession.studentToken, "FREE");
+      setScanSessionId(session.sessionId);
+      await scanApi.uploadBefore(session.sessionId, studentSession.studentToken, blob);
+      return toScanAnalysis(await pollAnalysis(session.sessionId, studentSession.studentToken));
+    }
+    if (!scanSessionId) throw new Error("진행 중인 촬영 세션을 찾지 못했어요.");
+    const after = await scanApi.uploadAfter(scanSessionId, studentSession.studentToken, true);
+    if (!after.improved || after.status === "ACTION_REQUIRED") {
+      return {
+        ...beforeAnalysis,
+        analysisId: `analysis-after-${scanSessionId}`,
+        scanSessionId,
+        phase: "AFTER",
+        requiredActions: after.remainingActions.map((label, index) => ({
+          ...beforeAnalysis.requiredActions[index % beforeAnalysis.requiredActions.length],
+          labelKo: label,
+          description: label,
+        })),
+        feedback: { title: "한 번만 더 고쳐보자", message: after.message, ttsText: after.message },
+      } satisfies ScanAnalysis;
+    }
+    const nextReward = await scanApi.reward(scanSessionId, studentSession.studentToken);
+    setReward(nextReward);
+    if (todayMission) {
+      void missionApi.complete(todayMission.missionId, scanSessionId, studentSession.studentToken).catch(() => undefined);
+    }
+    return { ...afterAnalysis, scanSessionId, analysisId: `analysis-after-${scanSessionId}` };
+  }, [image, scanSessionId, studentSession, todayMission]);
+
+  const loginTeacher = useCallback(async (name: string, email: string) => {
+    const response = apiConfig.enableMock
+      ? { success: true as const, teacherId: "demo-teacher", name, email }
+      : await teacherApi.login(name, email);
+    const nextSession: TeacherSession = { ...response, classId: apiConfig.teacherClassId };
+    teacherSessionStore.set(nextSession);
+    setTeacherSession(nextSession);
+    setScreen("teacher-dashboard");
+  }, []);
+
+  const toggleTeacherClassLock = useCallback(async (locked: boolean) => {
+    if (!teacherSession || apiConfig.enableMock) {
+      setTeacherClass((current) => current ? { ...current, locked } : current);
+      return;
+    }
+    await teacherApi.setLocked(teacherSession.teacherId, teacherSession.classId ?? apiConfig.teacherClassId, locked);
+    setTeacherClass((current) => current ? { ...current, locked } : current);
+  }, [teacherSession]);
+
+  const createTeacherClass = useCallback(async (input: { school: string; grade: number; className: number; goalTarget: number }) => {
+    if (!teacherSession) throw new Error("교사 로그인이 필요합니다.");
+    const created = apiConfig.enableMock
+      ? { success: true as const, classId: "demo-class", classCode: "581942", ...input, goalCurrent: 0, locked: false, studentCount: 0 }
+      : await teacherApi.createClass(teacherSession.teacherId, input);
+    const nextSession = { ...teacherSession, classId: created.classId };
+    teacherSessionStore.set(nextSession);
+    setTeacherSession(nextSession);
+    setTeacherClass(created);
+  }, [teacherSession]);
+
+  const refreshTeacherCode = useCallback(async () => {
+    if (!teacherSession || apiConfig.enableMock) return "581942";
+    const value = await teacherApi.classCode(teacherSession.teacherId, teacherSession.classId ?? apiConfig.teacherClassId);
+    setTeacherClass((current) => current ? { ...current, ...value } : current);
+    return value.classCode;
+  }, [teacherSession]);
 
   const speak = useCallback((text: string) => {
     if (muted || !("speechSynthesis" in window)) return;
@@ -371,33 +550,34 @@ export default function DasiBomApp() {
   const page = useMemo(() => {
     switch (screen) {
       case "welcome": return <Welcome onStart={() => setScreen("join")} onTeacher={() => setScreen("teacher-login")} />;
-      case "join": return <Join onBack={() => setScreen("welcome")} onSuccess={() => setScreen("nickname")} />;
-      case "nickname": return <Nickname onComplete={(name) => { setNickname(name); window.sessionStorage.setItem("dasibom-nickname", name); setScreen("home"); }} />;
-      case "home": return <Home nickname={nickname} onScan={() => setScreen("camera")} onCollection={() => setScreen("collection")} onMissions={() => setScreen("missions")} onCharacter={() => setScreen("character")} onBadges={() => setScreen("badges")} onChecklist={() => setScreen("checklist")} onGoal={() => setScreen("class-goal")} onSettings={() => setScreen("settings")} />;
+      case "join": return <Join onBack={() => setScreen("welcome")} onSuccess={(code) => { setPendingClassCode(code); setScreen("nickname"); }} />;
+      case "nickname": return <Nickname onComplete={enterStudent} />;
+      case "home": return <Home nickname={nickname} homeData={homeData} mission={todayMission} onScan={() => { setScanSessionId(null); setReward(null); setScreen("camera"); }} onCollection={() => setScreen("collection")} onMissions={() => setScreen("missions")} onCharacter={() => setScreen("character")} onBadges={() => setScreen("badges")} onChecklist={() => setScreen("checklist")} onGoal={() => setScreen("class-goal")} onSettings={() => setScreen("settings")} />;
       case "camera": return <CameraView phase="before" onCancel={() => setScreen("home")} onCapture={(photo) => { setImage(photo); setScreen("preview"); }} />;
       case "preview": return <PhotoPreview image={image} phase="before" onRetake={() => setScreen("camera")} onUse={() => setScreen("analysis")} />;
-      case "analysis": return <Analysis phase="before" mode={effectiveAnalysisMode} onDone={(analysis) => { setResult(analysis); setScreen("action"); }} onRetry={() => setAnalysisMode("normal")} onHome={() => setScreen("home")} />;
+      case "analysis": return <Analysis key={`before-${analysisAttempt}`} phase="before" mode={effectiveAnalysisMode} run={apiConfig.enableMock ? undefined : () => runLiveAnalysis("before")} onDone={(analysis) => { setResult(analysis); setScreen(analysis.status === "COMPLETED" ? "reward" : "action"); }} onRetry={() => { setAnalysisMode("normal"); setAnalysisAttempt((value) => value + 1); }} onHome={() => setScreen("home")} />;
       case "action": return <ActionResult result={result} onRetry={() => setScreen("after-camera")} onSpeak={speak} />;
       case "after-camera": return <CameraView phase="after" onCancel={() => setScreen("action")} onCapture={(photo) => { setImage(photo); setScreen("after-preview"); }} />;
       case "after-preview": return <PhotoPreview image={image} phase="after" onRetake={() => setScreen("after-camera")} onUse={() => setScreen("after-analysis")} />;
-      case "after-analysis": return <Analysis phase="after" mode={effectiveAnalysisMode} onDone={() => setScreen("reward")} onRetry={() => setAnalysisMode("normal")} onHome={() => setScreen("home")} />;
-      case "reward": return <Reward nickname={nickname} onHome={() => setScreen("home")} onCollection={() => setScreen("collection")} />;
-      case "collection": return <Collection nickname={nickname} onBack={() => setScreen("home")} />;
-      case "missions": return <MissionsPage onBack={() => setScreen("home")} onScan={() => setScreen("camera")} />;
+      case "after-analysis": return <Analysis key={`after-${analysisAttempt}`} phase="after" mode={effectiveAnalysisMode} run={apiConfig.enableMock ? undefined : () => runLiveAnalysis("after")} onDone={(analysis) => { setResult(analysis); setScreen(analysis.status === "COMPLETED" ? "reward" : "action"); }} onRetry={() => { setAnalysisMode("normal"); setAnalysisAttempt((value) => value + 1); }} onHome={() => setScreen("home")} />;
+      case "reward": return <Reward nickname={nickname} reward={reward} onHome={() => setScreen("home")} onCollection={() => setScreen("collection")} />;
+      case "collection": return <Collection nickname={nickname} remoteCollection={remoteCollection} onBack={() => setScreen("home")} />;
+      case "missions": return <MissionsPage mission={todayMission} onBack={() => setScreen("home")} onScan={() => setScreen("camera")} />;
       case "character": return <CharacterPage onBack={() => setScreen("home")} onBadges={() => setScreen("badges")} />;
       case "badges": return <BadgesPage onBack={() => setScreen("home")} />;
       case "class-goal": return <ClassGoalPage onBack={() => setScreen("home")} />;
       case "checklist": return <ChecklistPage onBack={() => setScreen("home")} onComplete={() => setScreen("checklist-result")} />;
       case "checklist-result": return <ChecklistResult onBack={() => setScreen("home")} />;
       case "settings": return <SettingsPage muted={muted} onMutedChange={setMuted} demoMode={analysisMode} onDemoModeChange={setAnalysisMode} onBack={() => setScreen("home")} onTeacher={() => setScreen("teacher-login")} />;
-      case "teacher-login": return <TeacherLogin onBack={() => setScreen("welcome")} onLogin={() => setScreen("teacher-dashboard")} />;
-      case "teacher-dashboard": return <TeacherDashboard onLogout={() => setScreen("welcome")} />;
+      case "teacher-login": return <TeacherLogin onBack={() => setScreen("welcome")} onLogin={loginTeacher} />;
+      case "teacher-dashboard": return <TeacherDashboard teacher={teacherSession} classData={teacherClass} onCreateClass={createTeacherClass} onRefreshCode={refreshTeacherCode} onToggleLock={toggleTeacherClassLock} onLogout={() => { teacherSessionStore.clear(); setTeacherSession(null); setScreen("welcome"); }} />;
     }
-  }, [analysisMode, effectiveAnalysisMode, image, muted, nickname, result, screen, speak]);
+  }, [analysisAttempt, analysisMode, createTeacherClass, effectiveAnalysisMode, enterStudent, homeData, image, loginTeacher, muted, nickname, refreshTeacherCode, remoteCollection, result, reward, runLiveAnalysis, screen, speak, teacherClass, teacherSession, todayMission, toggleTeacherClassLock]);
 
   return (
     <>
       <NetworkBanner online={online} />
+      {apiNotice && <div className="api-status-banner" role="alert">{apiNotice}<button onClick={() => setApiNotice("")} aria-label="알림 닫기">×</button></div>}
       {(screen === "home" || screen === "welcome") && resumeScreen && (
         <ResumeNotice
           screen={resumeScreen}
