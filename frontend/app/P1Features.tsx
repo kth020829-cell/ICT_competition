@@ -1,7 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DemoModeControl, type AnalysisMode } from "./P2Features";
+import type { Mission, TeacherClassResponse } from "../lib/api/contracts";
+import type { TeacherSession } from "../lib/api/session";
+import { apiErrorMessage } from "../lib/api/adapters";
 
 function PageHeader({ title, onBack }: { title: string; onBack: () => void }) {
   return (
@@ -13,8 +16,9 @@ function PageHeader({ title, onBack }: { title: string; onBack: () => void }) {
   );
 }
 
-export function MissionsPage({ onBack, onScan }: { onBack: () => void; onScan: () => void }) {
+export function MissionsPage({ mission, onBack, onScan }: { mission?: Mission | null; onBack: () => void; onScan: () => void }) {
   const missions = [
+    ...(mission ? [{ icon: "⚡", title: mission.title, type: mission.type, current: 0, target: mission.condition.find((item) => "count" in item)?.count ?? 1, reward: `+${mission.rewardXp} XP`, active: true }] : []),
     { icon: "🏷️", title: "라벨 구출 작전", type: "행동형", current: 1, target: 2, reward: "XP 2배", active: true },
     { icon: "📸", title: "오늘 3개 관찰하기", type: "개수형", current: 2, target: 3, reward: "+20 XP", active: true },
     { icon: "📦", title: "종이류 탐험", type: "카테고리형", current: 1, target: 3, reward: "탐험가 뱃지", active: false },
@@ -100,25 +104,80 @@ export function SettingsPage({ muted, onMutedChange, demoMode, onDemoModeChange,
   return <main className={`p1-page ${largeText ? "large-text" : ""}`}><PageHeader title="설정" onBack={onBack} /><section className="settings-content p1-content"><p className="eyebrow">사용 환경</p><h1 className="p1-title">나에게 편한 방식으로</h1><div className="settings-list"><label><span>🔊</span><div><strong>음성 안내</strong><small>AI 결과를 소리 내어 읽어요</small></div><input type="checkbox" checked={!muted} onChange={(event) => onMutedChange(!event.target.checked)} /></label><label><span>🔎</span><div><strong>큰 글씨</strong><small>중요한 글자를 더 크게 보여줘요</small></div><input type="checkbox" checked={largeText} onChange={(event) => setLargeText(event.target.checked)} /></label><div><span>🔒</span><div><strong>사진 처리 안내</strong><small>사진은 판정 후 저장하지 않아요</small></div><b>안전</b></div></div><DemoModeControl value={demoMode} onChange={onDemoModeChange} /><button className="teacher-entry" onClick={onTeacher}>교사이신가요? 교사용 화면으로 →</button></section></main>;
 }
 
-export function TeacherLogin({ onBack, onLogin }: { onBack: () => void; onLogin: () => void }) {
-  const [email, setEmail] = useState("teacher@dasibom.school");
-  const [password, setPassword] = useState("demo1234");
-  return <main className="teacher-login-page"><PageHeader title="교사용" onBack={onBack} /><section className="teacher-login-card"><div className="teacher-symbol">🧑‍🏫</div><p className="eyebrow">선생님 전용</p><h1>우리 반의 변화를<br />한눈에 확인하세요</h1><p>체험 계정이 자동으로 입력되어 있어요.</p><form onSubmit={(event) => { event.preventDefault(); onLogin(); }}><label>이메일<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label><label>비밀번호<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label><button className="primary-button">교사로 로그인</button></form></section></main>;
+export function TeacherLogin({ onBack, onLogin }: { onBack: () => void; onLogin: (name: string, email: string) => Promise<void> }) {
+  const [name, setName] = useState("김선생");
+  const [email, setEmail] = useState("teacher@gmail.com");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setError("");
+    try {
+      await onLogin(name.trim(), email.trim());
+    } catch (reason) {
+      setError(apiErrorMessage(reason));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+  return <main className="teacher-login-page"><PageHeader title="교사용" onBack={onBack} /><section className="teacher-login-card"><div className="teacher-symbol">🧑‍🏫</div><p className="eyebrow">선생님 전용</p><h1>우리 반의 변화를<br />한눈에 확인하세요</h1><p>공유 API 명세에 맞춰 이름과 이메일로 입장합니다.</p><form onSubmit={submit}><label>이름<input value={name} required onChange={(event) => setName(event.target.value.slice(0, 30))} /></label><label>이메일<input type="email" value={email} required onChange={(event) => setEmail(event.target.value)} /></label>{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-button" disabled={submitting}>{submitting ? "로그인 중…" : "교사로 로그인"}</button></form></section></main>;
 }
 
-export function TeacherDashboard({ onLogout }: { onLogout: () => void }) {
+export function TeacherDashboard({ teacher, classData, onCreateClass, onRefreshCode, onToggleLock, onLogout }: { teacher?: TeacherSession | null; classData?: TeacherClassResponse | null; onCreateClass?: (input: { school: string; grade: number; className: number; goalTarget: number }) => Promise<void>; onRefreshCode?: () => Promise<string>; onToggleLock?: (locked: boolean) => Promise<void>; onLogout: () => void }) {
   const [tab, setTab] = useState<"overview" | "students" | "content" | "settings">("overview");
   const [joinCode, setJoinCode] = useState("4B7K2M");
   const [locked, setLocked] = useState(false);
   const [notice, setNotice] = useState("");
   const [comparisonEnabled, setComparisonEnabled] = useState(false);
+  const [classForm, setClassForm] = useState({ school: "국민초등학교", grade: 6, className: 1, goalTarget: 100 });
+  const [creatingClass, setCreatingClass] = useState(false);
   const [contentItems, setContentItems] = useState([
     { id: 1, title: "라벨 구출 작전", type: "행동형 미션", active: true },
     { id: 2, title: "종이류 3개 관찰", type: "카테고리형 미션", active: true },
     { id: 3, title: "영동 포도 상자", type: "충북 특화 카드", active: true },
     { id: 4, title: "괴산 장류 용기", type: "충북 특화 카드", active: false },
   ]);
-  const regenerate = () => { setJoinCode("7NQ3RP"); setNotice("새 참여 코드가 발급되었어요."); };
+  useEffect(() => {
+    if (!classData) return;
+    const timer = window.setTimeout(() => {
+      setJoinCode(classData.classCode);
+      setLocked(classData.locked ?? false);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [classData]);
+  const refreshCode = async () => {
+    try {
+      const code = await onRefreshCode?.();
+      if (code) setJoinCode(code);
+      setNotice("현재 참여 코드를 새로 불러왔어요.");
+    } catch (reason) {
+      setNotice(apiErrorMessage(reason));
+    }
+  };
+  const createClass = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!onCreateClass || creatingClass) return;
+    setCreatingClass(true);
+    try {
+      await onCreateClass(classForm);
+      setNotice("새 학급을 만들었어요.");
+    } catch (reason) {
+      setNotice(apiErrorMessage(reason));
+    } finally {
+      setCreatingClass(false);
+    }
+  };
+  const toggleLock = async () => {
+    const next = !locked;
+    try {
+      await onToggleLock?.(next);
+      setLocked(next);
+      setNotice(next ? "학급 참여를 잠갔어요." : "학급 참여 잠금을 해제했어요.");
+    } catch (reason) {
+      setNotice(apiErrorMessage(reason));
+    }
+  };
   const students = useMemo(() => [
     ["초록탐험가", "오늘", "18장", "4회"], ["지구수호대", "오늘", "15장", "3회"], ["새싹요원", "어제", "12장", "5회"], ["분리왕", "오늘", "10장", "2회"], ["봄바람", "3일 전", "8장", "1회"],
   ], []);
@@ -135,9 +194,9 @@ export function TeacherDashboard({ onLogout }: { onLogout: () => void }) {
         <button className="logout-button" onClick={onLogout}>← 로그아웃</button>
       </aside>
       <section className="teacher-main">
-        <header><div><p>충북초등학교</p><h1>4학년 2반</h1></div><span>김다시봄 선생님</span></header>
+        <header><div><p>{classData?.school ?? "충북초등학교"}</p><h1>{classData?.grade ?? 4}학년 {classData?.className ?? 2}반</h1></div><span>{teacher?.name ?? "김다시봄"} 선생님</span></header>
         {notice && <div className="teacher-notice">✓ {notice}<button onClick={() => setNotice("")}>×</button></div>}
-        {tab === "overview" && <TeacherOverview joinCode={joinCode} locked={locked} onRegenerate={regenerate} onLock={() => setLocked((value) => !value)} />}
+        {tab === "overview" && <TeacherOverview joinCode={joinCode} locked={locked} classData={classData} onRefreshCode={refreshCode} onLock={toggleLock} />}
         {tab === "students" && (
           <div className="teacher-panel">
             <div className="panel-heading"><div><p className="eyebrow">익명 참여</p><h2>참여 학생 23명</h2></div><span>개인 순위는 표시하지 않습니다</span></div>
@@ -172,11 +231,21 @@ export function TeacherDashboard({ onLogout }: { onLogout: () => void }) {
             <section className="teacher-panel">
               <p className="eyebrow">참여 관리</p><h2>학급 참여 코드</h2>
               <div className="join-code-display"><b>{joinCode}</b><button onClick={() => { void navigator.clipboard?.writeText(joinCode); setNotice("참여 코드를 복사했어요."); }}>복사</button></div>
-              <button className="secondary-button" onClick={regenerate}>새 코드 발급</button>
+              <button className="secondary-button" onClick={() => void refreshCode()}>코드 새로고침</button>
+            </section>
+            <section className="teacher-panel">
+              <p className="eyebrow">학급 생성 API</p><h2>새 학급 만들기</h2>
+              <form className="class-create-form" onSubmit={createClass}>
+                <label>학교<input required value={classForm.school} onChange={(event) => setClassForm((value) => ({ ...value, school: event.target.value }))} /></label>
+                <label>학년<input type="number" min="1" max="6" value={classForm.grade} onChange={(event) => setClassForm((value) => ({ ...value, grade: Number(event.target.value) }))} /></label>
+                <label>반<input type="number" min="1" max="30" value={classForm.className} onChange={(event) => setClassForm((value) => ({ ...value, className: Number(event.target.value) }))} /></label>
+                <label>목표 카드<input type="number" min="1" value={classForm.goalTarget} onChange={(event) => setClassForm((value) => ({ ...value, goalTarget: Number(event.target.value) }))} /></label>
+                <button className="primary-button" disabled={creatingClass}>{creatingClass ? "만드는 중…" : "학급 만들기"}</button>
+              </form>
             </section>
             <section className="teacher-panel">
               <p className="eyebrow">보안</p><h2>학급 잠금</h2><p>잠그면 새로운 학생의 참여만 중단돼요. 기존 학생은 계속 이용할 수 있어요.</p>
-              <button className={`lock-button ${locked ? "locked" : ""}`} onClick={() => setLocked((value) => !value)}>{locked ? "🔒 잠금 해제" : "🔓 학급 잠그기"}</button>
+              <button className={`lock-button ${locked ? "locked" : ""}`} onClick={() => void toggleLock()}>{locked ? "🔒 잠금 해제" : "🔓 학급 잠그기"}</button>
             </section>
             <section className="teacher-panel comparison-setting">
               <p className="eyebrow">선택 기능</p><h2>다른 학급과 비교</h2><p>학급 전체 누적치만 비교하며 학생 개인 정보나 순위는 표시하지 않아요.</p>
@@ -190,6 +259,9 @@ export function TeacherDashboard({ onLogout }: { onLogout: () => void }) {
   );
 }
 
-function TeacherOverview({ joinCode, locked, onRegenerate, onLock }: { joinCode: string; locked: boolean; onRegenerate: () => void; onLock: () => void }) {
-  return <><div className="teacher-summary"><article><span>👫</span><p>참여 학생</p><h2>23명</h2><small>이번 주 +3명</small></article><article><span>📚</span><p>누적 카드</p><h2>312장</h2><small>목표의 62%</small></article><article><span>↻</span><p>교정 완료율</p><h2>78%</h2><small>지난주보다 +8%</small></article><article><span>⚡</span><p>미션 완료</p><h2>17명</h2><small>학급의 74%</small></article></div><div className="teacher-dashboard-grid"><section className="teacher-panel class-progress-panel"><div className="panel-heading"><div><p className="eyebrow">공동 목표</p><h2>카드 500장 모으기</h2></div><strong>312 / 500</strong></div><div className="class-progress"><span style={{ width: "62.4%" }} /></div><p>188장 더 모으면 나무 심기 인증서를 발급할 수 있어요.</p><button className="secondary-button" onClick={() => window.print()}>인증서 미리보기</button></section><section className="teacher-panel code-panel"><div className="panel-heading"><div><p className="eyebrow">학생 참여</p><h2>학급 코드</h2></div><span className={locked ? "status-locked" : "status-open"}>{locked ? "잠김" : "참여 가능"}</span></div><div className="join-code-display"><b>{joinCode}</b><button onClick={() => void navigator.clipboard?.writeText(joinCode)}>복사</button></div><div className="code-actions"><button onClick={onRegenerate}>코드 재발급</button><button onClick={onLock}>{locked ? "잠금 해제" : "학급 잠금"}</button></div></section><section className="teacher-panel confusion-panel"><div className="panel-heading"><div><p className="eyebrow">수업 활용</p><h2>많이 헷갈린 품목</h2></div><span>이번 주</span></div>{[["투명 페트병", 82, "라벨"], ["우유팩", 64, "내용물"], ["배달 용기", 46, "오염"]].map(([name, value, issue]) => <div className="confusion-row" key={name}><div><b>{name}</b><small>{issue} 상태를 자주 놓쳤어요</small></div><span><i style={{ width: `${value}%` }} /></span><strong>{value}%</strong></div>)}</section><section className="teacher-panel weekly-panel"><div className="panel-heading"><div><p className="eyebrow">활동 추이</p><h2>이번 주 판정</h2></div><strong>총 86회</strong></div><div className="bar-chart">{[35, 62, 48, 82, 68].map((value, index) => <div key={index}><span style={{ height: `${value}%` }} /><small>{["월", "화", "수", "목", "금"][index]}</small></div>)}</div></section></div></>;
+function TeacherOverview({ joinCode, locked, classData, onRefreshCode, onLock }: { joinCode: string; locked: boolean; classData?: TeacherClassResponse | null; onRefreshCode: () => void; onLock: () => void }) {
+  const current = classData?.goalCurrent ?? 312;
+  const target = classData?.goalTarget ?? 500;
+  const percent = target > 0 ? Math.min(100, current / target * 100) : 0;
+  return <><div className="teacher-summary"><article><span>👫</span><p>참여 학생</p><h2>{classData?.studentCount ?? 23}명</h2><small>익명 학생 기준</small></article><article><span>📚</span><p>누적 카드</p><h2>{current}장</h2><small>목표의 {Math.round(percent)}%</small></article><article><span>↻</span><p>교정 완료율</p><h2>78%</h2><small>지난주보다 +8%</small></article><article><span>⚡</span><p>미션 완료</p><h2>17명</h2><small>학급의 74%</small></article></div><div className="teacher-dashboard-grid"><section className="teacher-panel class-progress-panel"><div className="panel-heading"><div><p className="eyebrow">공동 목표</p><h2>카드 {target}장 모으기</h2></div><strong>{current} / {target}</strong></div><div className="class-progress"><span style={{ width: `${percent}%` }} /></div><p>{Math.max(0, target - current)}장 더 모으면 공동 목표를 달성해요.</p><button className="secondary-button" onClick={() => window.print()}>인증서 미리보기</button></section><section className="teacher-panel code-panel"><div className="panel-heading"><div><p className="eyebrow">학생 참여</p><h2>학급 코드</h2></div><span className={locked ? "status-locked" : "status-open"}>{locked ? "잠김" : "참여 가능"}</span></div><div className="join-code-display"><b>{joinCode}</b><button onClick={() => void navigator.clipboard?.writeText(joinCode)}>복사</button></div><div className="code-actions"><button onClick={onRefreshCode}>코드 새로고침</button><button onClick={() => void onLock()}>{locked ? "잠금 해제" : "학급 잠금"}</button></div></section><section className="teacher-panel confusion-panel"><div className="panel-heading"><div><p className="eyebrow">수업 활용</p><h2>많이 헷갈린 품목</h2></div><span>이번 주</span></div>{[["투명 페트병", 82, "라벨"], ["우유팩", 64, "내용물"], ["배달 용기", 46, "오염"]].map(([name, value, issue]) => <div className="confusion-row" key={name}><div><b>{name}</b><small>{issue} 상태를 자주 놓쳤어요</small></div><span><i style={{ width: `${value}%` }} /></span><strong>{value}%</strong></div>)}</section><section className="teacher-panel weekly-panel"><div className="panel-heading"><div><p className="eyebrow">활동 추이</p><h2>이번 주 판정</h2></div><strong>총 86회</strong></div><div className="bar-chart">{[35, 62, 48, 82, 68].map((value, index) => <div key={index}><span style={{ height: `${value}%` }} /><small>{["월", "화", "수", "목", "금"][index]}</small></div>)}</div></section></div></>;
 }
