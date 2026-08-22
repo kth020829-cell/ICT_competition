@@ -37,7 +37,7 @@ def student_join(request: StudentJoinRequest):
     class_id = class_doc.id
 
     # 2. 학급 잠금 확인
-    if class_data.get("isLocked", False):
+    if class_data.get("locked", False):
         raise HTTPException(
             status_code=403,
             detail="현재 잠긴 학급입니다."
