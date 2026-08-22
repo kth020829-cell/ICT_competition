@@ -1,0 +1,33 @@
+# --- STEP 1: Mock 서버 (현재 필요한 전부) ---
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+python-multipart==0.0.20
+
+# 테스트
+pytest==8.3.4
+httpx==0.28.1
+
+# --- STEP 2: 전처리 + YOLO 검출 ---
+# torch가 함께 딸려온다(약 500MB). 설치에 몇 분 걸린다.
+ultralytics==8.4.118
+opencv-python-headless==5.0.0.93
+pillow==12.3.0
+numpy==2.5.2
+
+# --- STEP 6: 평가 스크립트 ---
+pandas==3.0.5
+tabulate==0.10.0
+
+# --- STEP 3: 안전 필터 ---
+# BlazeFace(short-range). 1.0.0에서 레거시 solutions API가 제거되어 Tasks API를 쓴다.
+# 가중치(blaze_face_short_range.tflite)는 저장소에 함께 들어 있다.
+mediapipe==1.0.0
+
+# --- STEP 4: VLM 상태 판정 ---
+anthropic==0.121.0
+
+# --- STEP 10: ONNX 변환 + CPU 벤치마크 ---
+# onnx==1.17.0
+# onnxruntime==1.20.1
