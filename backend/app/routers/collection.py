@@ -8,6 +8,11 @@ router = APIRouter(
     tags=["Collection"]
 )
 
+
+# ==========================================
+# 학생 인증
+# ==========================================
+
 def get_student(student_token: str | None):
 
     if not student_token:
@@ -39,23 +44,29 @@ def get_student(student_token: str | None):
 
     return student_doc.id, student_doc.to_dict()
 
+
+# ==========================================
+# GET /collection
+# 전체 도감 조회
+# ==========================================
+
 @router.get("")
 def get_collection(
     student_token: str | None = Header(default=None)
 ):
 
-    # ==========================================
+    # --------------------------------------
     # 1. 학생 인증
-    # ==========================================
+    # --------------------------------------
 
     student_id, student_data = get_student(
         student_token
     )
 
 
-    # ==========================================
+    # --------------------------------------
     # 2. 모든 카드 조회
-    # ==========================================
+    # --------------------------------------
 
     card_docs = (
         db.collection("card")
@@ -63,19 +74,37 @@ def get_collection(
     )
 
 
-    # ==========================================
-    # 3. 학생 수집 데이터
-    # ==========================================
+    # --------------------------------------
+    # 3. 학생의 collection 서브컬렉션 조회
+    # --------------------------------------
 
-    student_collection = student_data.get(
-        "collection",
-        {}
+    student_collection_ref = (
+        db.collection("students")
+        .document(student_id)
+        .collection("collection")
+    )
+
+    student_collection_docs = (
+        student_collection_ref
+        .stream()
     )
 
 
-    # ==========================================
+    # cardId를 key로 사용하기 위해
+    student_collection = {}
+
+    for collection_doc in student_collection_docs:
+
+        collection_data = collection_doc.to_dict()
+
+        student_collection[
+            collection_doc.id
+        ] = collection_data
+
+
+    # --------------------------------------
     # 4. 도감 생성
-    # ==========================================
+    # --------------------------------------
 
     collections = []
 
@@ -93,10 +122,9 @@ def get_collection(
             {}
         )
 
-        collected = collection_data.get(
-            "collected",
-            False
-        )
+        # collection 서브컬렉션에 문서가 존재하면
+        # 획득한 카드로 판단
+        collected = bool(collection_data)
 
         count = collection_data.get(
             "count",
@@ -108,12 +136,13 @@ def get_collection(
 
         total_count += 1
 
+
         collections.append({
             "cardId": card_id,
             "name": card_data.get("name"),
             "type": card_data.get("type"),
-            "level": card_data.get("level"),
             "class": card_data.get("class"),
+            "level": card_data.get("level"),
             "needsActions": card_data.get(
                 "needsActions"
             ),
@@ -122,9 +151,9 @@ def get_collection(
         })
 
 
-    # ==========================================
+    # --------------------------------------
     # 5. 응답
-    # ==========================================
+    # --------------------------------------
 
     return {
         "success": True,
@@ -134,24 +163,30 @@ def get_collection(
         "collections": collections
     }
 
+
+# ==========================================
+# GET /collection/{card_id}
+# 특정 카드 조회
+# ==========================================
+
 @router.get("/{card_id}")
 def get_collection_card(
     card_id: str,
     student_token: str | None = Header(default=None)
 ):
 
-    # ==========================================
+    # --------------------------------------
     # 1. 학생 인증
-    # ==========================================
+    # --------------------------------------
 
     student_id, student_data = get_student(
         student_token
     )
 
 
-    # ==========================================
+    # --------------------------------------
     # 2. 카드 조회
-    # ==========================================
+    # --------------------------------------
 
     card_ref = (
         db.collection("card")
@@ -169,36 +204,25 @@ def get_collection_card(
     card_data = card_doc.to_dict()
 
 
-    # ==========================================
-    # 3. 학생 수집 상태 확인
-    # ==========================================
+    # --------------------------------------
+    # 3. 학생 collection 조회
+    # --------------------------------------
 
-    student_collection = student_data.get(
-        "collection",
-        {}
+    collection_ref = (
+        db.collection("students")
+        .document(student_id)
+        .collection("collection")
+        .document(card_id)
     )
 
-    collection_data = student_collection.get(
-        card_id,
-        {}
-    )
-
-    collected = collection_data.get(
-        "collected",
-        False
-    )
-
-    count = collection_data.get(
-        "count",
-        0
-    )
+    collection_doc = collection_ref.get()
 
 
-    # ==========================================
-    # 4. 미획득 카드
-    # ==========================================
+    # --------------------------------------
+    # 4. 아직 획득하지 않은 카드
+    # --------------------------------------
 
-    if not collected:
+    if not collection_doc.exists:
 
         return {
             "success": True,
@@ -213,9 +237,17 @@ def get_collection_card(
         }
 
 
-    # ==========================================
-    # 5. 획득 카드
-    # ==========================================
+    # --------------------------------------
+    # 5. 획득한 카드
+    # --------------------------------------
+
+    collection_data = collection_doc.to_dict()
+
+    count = collection_data.get(
+        "count",
+        0
+    )
+
 
     return {
         "success": True,
