@@ -45,7 +45,14 @@ export interface SessionResultResponse {
     analysisId?: string;
   };
   // AFTER 판정 결과. 백엔드가 AI 비교를 끝내면 채워진다.
-  after?: { improved: boolean; remainingActions: string[] };
+  after?: {
+    improved: boolean;
+    remainingActions: string[];
+    remainingActionCodes?: string[];
+    // 통과하지 못한 이유. remainingActions 가 비어도 여기엔 설명이 있다.
+    feedbackText?: string | null;
+    aiStatus?: string | null;
+  };
   aiError?: string | null;
 }
 

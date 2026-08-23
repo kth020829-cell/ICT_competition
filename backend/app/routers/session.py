@@ -425,7 +425,16 @@ def analyze_after(
             "status": status,
             "after": {
                 "improved": improved,
-                "remainingActions": remaining_actions
+                "remainingActions": remaining_actions,
+                "remainingActionCodes": ai_data.get(
+                    "remainingActionCodes",
+                    []
+                ),
+                # AI가 왜 통과시키지 않았는지는 이 문구에만 들어 있다.
+                # remainingActions 는 Before에서 요구했던 것만 담기므로,
+                # 새로 생긴 문제나 다른 물건을 찍은 경우에는 비어 있다.
+                "feedbackText": ai_data.get("feedbackText"),
+                "aiStatus": ai_data.get("aiStatus")
             }
         })
 

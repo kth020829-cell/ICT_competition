@@ -81,7 +81,7 @@ export const disposalNames: Record<string, string> = {
 };
 
 // actionCodes 가 있으면 그걸 쓴다. 한글 문구로 코드를 되짚는 건 마지막 수단이다.
-function toAction(action: string, code?: string): RequiredAction {
+export function toRequiredAction(action: string, code?: string): RequiredAction {
   const byCode = code ? metadataByCode.get(code as ActionCode) : undefined;
   if (byCode) {
     return { code: byCode.code, icon: byCode.icon, labelKo: action || byCode.label, description: action || byCode.label };
@@ -110,13 +110,20 @@ export function toScanAnalysis(response: SessionResultResponse): ScanAnalysis {
     status: result.needsAction ? "ACTION_REQUIRED" : "COMPLETED",
     detection: {
       classCode: result.detectedClass,
-      classNameKo: classNames[result.detectedClass] ?? result.detectedClass,
+      // 거부·실패 판정은 품목이 없다(detectedClass=""). 빈 칩을 띄우지 않는다.
+      classNameKo: result.detectedClass ? (classNames[result.detectedClass] ?? result.detectedClass) : "",
       confidence: result.confidence,
     },
     disposalCategory: result.disposalCategory,
-    requiredActions: result.actions.map((action, index) => toAction(action, result.actionCodes?.[index])),
+    requiredActions: result.actions.map((action, index) => toRequiredAction(action, result.actionCodes?.[index])),
     feedback: {
-      title: result.needsAction ? "조금만 고치면 돼!" : "바로 배출해도 좋아!",
+      // 고칠 행동이 없는데 needsAction 이면 사진 자체가 거부된 경우다.
+      // (흐림·얼굴·여러 개 등) "조금만 고치면 돼!"는 그때 맞지 않는다.
+      title: !result.needsAction
+        ? "바로 배출해도 좋아!"
+        : result.actions.length > 0
+          ? "조금만 고치면 돼!"
+          : "다시 찍어볼까?",
       message: result.feedbackText,
       ttsText: result.feedbackText,
     },

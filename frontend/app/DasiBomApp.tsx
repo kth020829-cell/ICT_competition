@@ -23,7 +23,7 @@ import {
 } from "./P2Features";
 import { useOnlineStatus, useScanRecovery, useServiceWorker } from "./useResilience";
 import { apiConfig } from "../lib/api/config";
-import { apiErrorMessage, disposalNames, toScanAnalysis, withRo } from "../lib/api/adapters";
+import { apiErrorMessage, disposalNames, toRequiredAction, toScanAnalysis, withRo } from "../lib/api/adapters";
 import { collectionApi, missionApi, scanApi, studentApi, teacherApi } from "../lib/api/services";
 import { studentSessionStore, teacherSessionStore, type StudentSession, type TeacherSession } from "../lib/api/session";
 import { imageUrlToBlob, pollAfterAnalysis, pollAnalysis } from "../lib/api/workflows";
@@ -340,7 +340,6 @@ function Analysis({ phase, mode, run, onDone, onRetry, onHome }: { phase: "befor
 // 고칠 개수는 판정마다 다르다. "세 가지"로 못박으면 두 개만 뜰 때 아이가 하나를 찾아 헤맨다.
 const COUNT_KO = ["", "한", "두", "세", "네", "다섯", "여섯"];
 function actionHeading(count: number) {
-  if (count === 0) return "고칠 게 없어!";
   const word = COUNT_KO[count] ?? String(count);
   return `이 ${word} 가지만 고쳐보자`;
 }
@@ -348,12 +347,14 @@ function actionHeading(count: number) {
 function ActionResult({ result, onRetry, onSpeak }: { result: ScanAnalysis; onRetry: () => void; onSpeak: (text: string) => void }) {
   return (
     <main className="result-screen">
-      <header className="result-header"><Brand compact /><span className="result-chip">🧴 {result.detection.classNameKo}</span></header>
+      <header className="result-header"><Brand compact />{result.detection.classNameKo && <span className="result-chip">♻️ {result.detection.classNameKo}</span>}</header>
       <section className="result-hero warning">
         <div className="result-character">🌱<b>•ᴗ•</b></div>
         <div><p className="eyebrow">거의 다 왔어!</p><h1>{result.feedback.title}</h1><p>{result.feedback.message}</p><button className="speak-button" onClick={() => onSpeak(result.feedback.ttsText)}>🔊 다시 듣기</button></div>
       </section>
-      <section className="action-list-wrap"><div className="section-heading"><div><span className="section-icon">✨</span><div><small>직접 해볼 차례</small><h2>{actionHeading(result.requiredActions.length)}</h2></div></div><b className="count-chip">{result.requiredActions.length}가지</b></div><div className="action-list">{result.requiredActions.map((action, index) => <article className="action-item" key={`${action.code}-${index}`}><b>{index + 1}</b><span>{action.icon}</span><div><h3>{action.labelKo}</h3><p>{action.description}</p></div></article>)}</div></section>
+      {result.requiredActions.length > 0 && (
+        <section className="action-list-wrap"><div className="section-heading"><div><span className="section-icon">✨</span><div><small>직접 해볼 차례</small><h2>{actionHeading(result.requiredActions.length)}</h2></div></div><b className="count-chip">{result.requiredActions.length}가지</b></div><div className="action-list">{result.requiredActions.map((action, index) => <article className="action-item" key={`${action.code}-${index}`}><b>{index + 1}</b><span>{action.icon}</span><div><h3>{action.labelKo}</h3><p>{action.description}</p></div></article>)}</div></section>
+      )}
       <footer className="sticky-action"><div><span>💡</span><p><strong>다 고쳤다면?</strong><small>같은 물건을 다시 찍어 보여줘!</small></p></div><button className="primary-button" onClick={onRetry}>고치고 다시 찍기 <span>→</span></button></footer>
     </main>
   );
@@ -554,23 +555,29 @@ export default function DasiBomApp() {
     await scanApi.uploadAfter(scanSessionId, studentSession.studentToken, afterBlob);
     const afterResult = await pollAfterAnalysis(scanSessionId, studentSession.studentToken);
     const after = afterResult.after ?? { improved: false, remainingActions: [] };
+    // Before 판정을 베이스로 쓴다. 예전엔 mockData 를 깔아서 품목·확신도가
+    // 실제 판정과 무관한 값이었다.
+    const base = toScanAnalysis(afterResult);
     if (!after.improved) {
-      const message = after.remainingActions[0] ?? "아직 조금 더 손봐야 해.";
+      // remainingActions 는 Before에서 요구했던 것 중 남은 것만 담는다.
+      // 새 문제가 생겼거나 다른 물건을 찍으면 비어 있고, 이유는 feedbackText 에만 있다.
+      const message = after.feedbackText
+        ?? after.remainingActions[0]
+        ?? "이번 사진으로는 확인이 어려웠어. 물건이 잘 보이게 다시 찍어줄래?";
       return {
-        ...beforeAnalysis,
+        ...base,
         analysisId: `analysis-after-${scanSessionId}`,
         scanSessionId,
         phase: "AFTER",
-        requiredActions: after.remainingActions.map((label, index) => ({
-          ...beforeAnalysis.requiredActions[index % beforeAnalysis.requiredActions.length],
-          labelKo: label,
-          description: label,
-        })),
-        feedback: { title: "한 번만 더 고쳐보자", message, ttsText: message },
+        status: "ACTION_REQUIRED",
+        requiredActions: after.remainingActions.map(
+          (label, index) => toRequiredAction(label, after.remainingActionCodes?.[index]),
+        ),
+        feedback: { title: after.remainingActions.length > 0 ? "한 번만 더 고쳐보자" : "다시 찍어볼까?", message, ttsText: message },
       } satisfies ScanAnalysis;
     }
     await grantReward(scanSessionId, studentSession.studentToken);
-    return { ...afterAnalysis, scanSessionId, analysisId: `analysis-after-${scanSessionId}` };
+    return { ...base, scanSessionId, phase: "AFTER", status: "COMPLETED", requiredActions: [], analysisId: `analysis-after-${scanSessionId}` };
   }, [grantReward, image, scanSessionId, studentSession]);
 
   const loginTeacher = useCallback(async (name: string, email: string) => {
