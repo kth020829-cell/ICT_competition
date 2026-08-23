@@ -108,9 +108,14 @@ def get_student_home(
     # 5. 도감 수집 상태
     # ==========================================
 
+    # 카드는 students/{id}/collection 서브컬렉션에 쌓인다.
+    # (app/services/collection.py 가 거기에 쓰고, /collection 도 거기서 읽는다)
+    # 예전에는 존재하지 않는 최상위 student_collections 를 읽어서
+    # 홈의 도감 개수가 항상 0으로 나왔다.
     student_collection_docs = list(
-        db.collection("student_collections")
-        .where("studentId", "==", student_id)
+        db.collection("students")
+        .document(student_id)
+        .collection("collection")
         .stream()
     )
 
