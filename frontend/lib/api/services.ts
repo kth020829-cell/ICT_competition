@@ -1,7 +1,6 @@
 import { apiRequest } from "./client";
 import {
   assertApiSuccess,
-  type AfterResponse,
   type ClassCodeResponse,
   type ClassLockResponse,
   type CollectionItemResponse,
@@ -19,6 +18,14 @@ import {
   type UploadResponse,
 } from "./contracts";
 
+// 백엔드 /sessions/{id}/before·after 는 multipart 의 `file` 필드를 받는다.
+// (FastAPI: file: UploadFile = File(...)) 헤더는 브라우저가 boundary 와 함께 붙인다.
+function imageFormData(image: Blob) {
+  const form = new FormData();
+  form.append("file", image, "capture.jpg");
+  return form;
+}
+
 async function checked<T extends { success: true }>(
   request: Promise<unknown>,
   keys: string[],
@@ -35,7 +42,7 @@ export const studentApi = {
     ["studentId", "studentToken", "nickname", "classId"],
     "학생 인증",
   ),
-  home: (studentToken: string) => apiRequest<HomeResponse>("/home", { studentToken }),
+  home: (studentToken: string) => apiRequest<HomeResponse>("/student/home", { studentToken }),
 };
 
 export const scanApi = {
@@ -48,19 +55,18 @@ export const scanApi = {
     apiRequest(`/sessions/${encodeURIComponent(sessionId)}/before`, {
       method: "POST",
       studentToken,
-      headers: { "content-type": image.type || "image/jpeg" },
-      body: image,
+      body: imageFormData(image),
     }),
     ["sessionId", "status", "message"],
     "1차 촬영",
   ),
-  uploadAfter: (sessionId: string, studentToken: string, improved = true) => checked<AfterResponse>(
+  uploadAfter: (sessionId: string, studentToken: string, image: Blob) => checked<UploadResponse>(
     apiRequest(`/sessions/${encodeURIComponent(sessionId)}/after`, {
       method: "POST",
       studentToken,
-      body: { improved },
+      body: imageFormData(image),
     }),
-    ["sessionId", "status", "improved", "remainingActions", "message"],
+    ["sessionId", "status", "message"],
     "재촬영",
   ),
   result: (sessionId: string, studentToken: string) => checked<SessionResultResponse>(
@@ -69,7 +75,7 @@ export const scanApi = {
     "판정 결과",
   ),
   reward: (sessionId: string, studentToken: string) => checked<RewardResponse>(
-    apiRequest(`/sessions/${encodeURIComponent(sessionId)}/reward`, { method: "POST", studentToken }),
+    apiRequest(`/rewards/${encodeURIComponent(sessionId)}`, { method: "POST", studentToken }),
     ["sessionId", "rewardTransactionId", "reward", "student", "collection"],
     "보상",
   ),

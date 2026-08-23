@@ -3,8 +3,19 @@ import { apiConfig } from "./config";
 export interface ApiErrorBody {
   success?: false;
   message?: string;
-  detail?: string;
+  // FastAPI 는 422 에서 detail 을 객체 배열로 준다. 문자열로 단정하면 안 된다.
+  detail?: string | Array<{ msg?: string; loc?: unknown[] }>;
   code?: string;
+}
+
+// detail 이 배열인 채로 Error 에 들어가면 화면에 "[object Object]" 가 찍힌다.
+function readDetail(detail: ApiErrorBody["detail"]): string | undefined {
+  if (typeof detail === "string") return detail;
+  if (!Array.isArray(detail)) return undefined;
+  const messages = detail
+    .map((entry) => (typeof entry?.msg === "string" ? entry.msg : null))
+    .filter((entry): entry is string => Boolean(entry));
+  return messages.length > 0 ? messages.join(" / ") : undefined;
 }
 
 export class ApiError extends Error {
@@ -41,7 +52,7 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
   );
   const headers = new Headers(options.headers);
   if (options.studentToken) headers.set("student-token", options.studentToken);
-  if (options.teacherId) headers.set("teacher_id", options.teacherId);
+  if (options.teacherId) headers.set("teacher-id", options.teacherId);
 
   let body = options.body;
   if (body != null && !isBodyInit(body)) {
@@ -64,7 +75,7 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
     if (!response.ok) {
       const error = typeof payload === "object" && payload !== null ? payload as ApiErrorBody : {};
       throw new ApiError(
-        error.message ?? error.detail ?? "요청을 처리하지 못했어요.",
+        error.message ?? readDetail(error.detail) ?? "요청을 처리하지 못했어요.",
         response.status,
         error.code ?? `HTTP_${response.status}`,
         response.status === 408 || response.status === 429 || response.status >= 500,

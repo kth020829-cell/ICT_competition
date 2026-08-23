@@ -32,15 +32,21 @@ export interface UploadResponse {
 export interface SessionResultResponse {
   success: true;
   sessionId: string;
-  status: SessionStatus;
+  status: SessionStatus | "AI_FAILED";
   result?: {
     detectedClass: string;
     confidence: number;
     needsAction: boolean;
     actions: string[];
+    // AI 서버가 주는 안정적인 행동 코드. actions 와 같은 순서·같은 길이.
+    actionCodes?: string[];
     disposalCategory: string;
     feedbackText: string;
+    analysisId?: string;
   };
+  // AFTER 판정 결과. 백엔드가 AI 비교를 끝내면 채워진다.
+  after?: { improved: boolean; remainingActions: string[] };
+  aiError?: string | null;
 }
 
 export interface AfterResponse {
@@ -57,8 +63,9 @@ export interface RewardResponse {
   sessionId: string;
   rewardTransactionId: string;
   reward: { xp: number; missionCompleted: boolean };
-  student: { xp: number; level: number; badge: unknown };
-  collection: unknown;
+  student: { xp: number; level: number; badge: string };
+  // 도감에 카드가 없는 품목이면 registered=false 로 온다. cardId 도 없다.
+  collection: { registered: boolean; cardId?: string; isNew?: boolean; count?: number };
 }
 
 export interface CollectionItemResponse {

@@ -32,6 +32,9 @@ class SessionResultRequest(BaseModel):
     confidence: float
     needsAction: bool
     actions: list[str]
+    # AI가 주는 안정적인 행동 코드. 이걸 버리면 프론트가 한글 문구로
+    # 코드를 되짚어야 해서 행동이 화면에서 누락된다.
+    actionCodes: list[str] = []
     disposalCategory: str
     feedbackText: str
     analysisId: str | None = None
@@ -152,6 +155,7 @@ def analyze_before(
             "confidence": result.confidence,
             "needsAction": result.needsAction,
             "actions": result.actions,
+            "actionCodes": result.actionCodes,
             "disposalCategory": result.disposalCategory,
             "feedbackText": result.feedbackText
         }
@@ -355,6 +359,8 @@ def get_session_result(
         "sessionId": session_id,
         "status": session_data.get("status"),
         "result": session_data.get("result"),
+        # After 판정 결과. 이게 없으면 프론트가 재촬영 성공 여부를 알 수 없다.
+        "after": session_data.get("after"),
         "aiError": session_data.get("aiError")
     }
 

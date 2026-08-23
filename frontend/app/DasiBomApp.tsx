@@ -23,11 +23,11 @@ import {
 } from "./P2Features";
 import { useOnlineStatus, useScanRecovery, useServiceWorker } from "./useResilience";
 import { apiConfig } from "../lib/api/config";
-import { apiErrorMessage, toScanAnalysis } from "../lib/api/adapters";
+import { apiErrorMessage, disposalNames, toScanAnalysis, withRo } from "../lib/api/adapters";
 import { collectionApi, missionApi, scanApi, studentApi, teacherApi } from "../lib/api/services";
 import { studentSessionStore, teacherSessionStore, type StudentSession, type TeacherSession } from "../lib/api/session";
-import { imageUrlToBlob, pollAnalysis } from "../lib/api/workflows";
-import type { CollectionResponse, HomeResponse, Mission, RewardResponse, TeacherClassResponse } from "../lib/api/contracts";
+import { imageUrlToBlob, pollAfterAnalysis, pollAnalysis } from "../lib/api/workflows";
+import type { CollectionItemResponse, CollectionResponse, HomeResponse, Mission, RewardResponse, TeacherClassResponse } from "../lib/api/contracts";
 
 const DEMO_CODE = "4B7K2M";
 
@@ -103,8 +103,14 @@ function Join({ onBack, onSuccess }: { onBack: () => void; onSuccess: (code: str
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
-    if (apiConfig.enableMock && code.toUpperCase() !== DEMO_CODE) {
-      setError(`체험 코드는 ${DEMO_CODE}예요.`);
+    if (apiConfig.enableMock) {
+      if (code.toUpperCase() !== DEMO_CODE) {
+        setError(`체험 코드는 ${DEMO_CODE}예요.`);
+        return;
+      }
+    } else if (!/^\d{6}$/.test(code)) {
+      // 실제 학급 코드는 숫자 6자리다. 여기서 막지 않으면 별명 단계까지 가서야 422가 난다.
+      setError("참여 코드는 숫자 6자리야.");
       return;
     }
     onSuccess(code.toUpperCase());
@@ -122,7 +128,7 @@ function Join({ onBack, onSuccess }: { onBack: () => void; onSuccess: (code: str
         <div className="auth-icon">🏫</div>
         <p className="eyebrow">우리 반에 들어가기</p>
         <h1>선생님이 알려준<br />참여 코드를 입력해줘</h1>
-        <p>영문 또는 숫자로 된 6자리 코드야.</p>
+        <p>{apiConfig.enableMock ? "영문 또는 숫자로 된 6자리 코드야." : "숫자 6자리 코드야."}</p>
         <form onSubmit={submit}>
           <label htmlFor="class-code">학급 참여 코드</label>
           <input
@@ -133,7 +139,7 @@ function Join({ onBack, onSuccess }: { onBack: () => void; onSuccess: (code: str
               setCode(event.target.value.replace(/\s/g, "").toUpperCase().slice(0, 6));
               setError("");
             }}
-            placeholder={DEMO_CODE}
+            placeholder={apiConfig.enableMock ? DEMO_CODE : "000000"}
             autoCapitalize="characters"
             autoComplete="off"
             aria-describedby={error ? "code-error" : undefined}
@@ -141,9 +147,11 @@ function Join({ onBack, onSuccess }: { onBack: () => void; onSuccess: (code: str
           {error && <p id="code-error" className="form-error">{error}</p>}
           <button className="primary-button" disabled={code.length !== 6}>다음으로</button>
         </form>
-        <button className="text-button" onClick={() => { setCode(DEMO_CODE); setError(""); }}>
-          체험 코드 자동 입력
-        </button>
+        {apiConfig.enableMock && (
+          <button className="text-button" onClick={() => { setCode(DEMO_CODE); setError(""); }}>
+            체험 코드 자동 입력
+          </button>
+        )}
       </section>
     </main>
   );
@@ -329,6 +337,14 @@ function Analysis({ phase, mode, run, onDone, onRetry, onHome }: { phase: "befor
   );
 }
 
+// 고칠 개수는 판정마다 다르다. "세 가지"로 못박으면 두 개만 뜰 때 아이가 하나를 찾아 헤맨다.
+const COUNT_KO = ["", "한", "두", "세", "네", "다섯", "여섯"];
+function actionHeading(count: number) {
+  if (count === 0) return "고칠 게 없어!";
+  const word = COUNT_KO[count] ?? String(count);
+  return `이 ${word} 가지만 고쳐보자`;
+}
+
 function ActionResult({ result, onRetry, onSpeak }: { result: ScanAnalysis; onRetry: () => void; onSpeak: (text: string) => void }) {
   return (
     <main className="result-screen">
@@ -337,22 +353,54 @@ function ActionResult({ result, onRetry, onSpeak }: { result: ScanAnalysis; onRe
         <div className="result-character">🌱<b>•ᴗ•</b></div>
         <div><p className="eyebrow">거의 다 왔어!</p><h1>{result.feedback.title}</h1><p>{result.feedback.message}</p><button className="speak-button" onClick={() => onSpeak(result.feedback.ttsText)}>🔊 다시 듣기</button></div>
       </section>
-      <section className="action-list-wrap"><div className="section-heading"><div><span className="section-icon">✨</span><div><small>직접 해볼 차례</small><h2>이 세 가지만 고쳐보자</h2></div></div><b className="count-chip">3가지</b></div><div className="action-list">{result.requiredActions.map((action, index) => <article className="action-item" key={action.code}><b>{index + 1}</b><span>{action.icon}</span><div><h3>{action.labelKo}</h3><p>{action.description}</p></div></article>)}</div></section>
+      <section className="action-list-wrap"><div className="section-heading"><div><span className="section-icon">✨</span><div><small>직접 해볼 차례</small><h2>{actionHeading(result.requiredActions.length)}</h2></div></div><b className="count-chip">{result.requiredActions.length}가지</b></div><div className="action-list">{result.requiredActions.map((action, index) => <article className="action-item" key={`${action.code}-${index}`}><b>{index + 1}</b><span>{action.icon}</span><div><h3>{action.labelKo}</h3><p>{action.description}</p></div></article>)}</div></section>
       <footer className="sticky-action"><div><span>💡</span><p><strong>다 고쳤다면?</strong><small>같은 물건을 다시 찍어 보여줘!</small></p></div><button className="primary-button" onClick={onRetry}>고치고 다시 찍기 <span>→</span></button></footer>
     </main>
   );
 }
 
-function Reward({ nickname, reward, onHome, onCollection }: { nickname: string; reward?: RewardResponse | null; onHome: () => void; onCollection: () => void }) {
+// 도감 카드 class 별 그림. 카드 자체 아이콘이 백엔드에 없어서 여기서 고른다.
+const CARD_ART: Record<string, string> = {
+  pet: "🧴", plastic: "🥡", can: "🥫", glass: "🍾",
+  pack: "🥛", paper: "📦", vinyl: "🛍️", etc: "♻️",
+};
+
+function rarityOf(level?: number) {
+  if (!level) return "일반";
+  return level >= 3 ? "전설" : level === 2 ? "희귀" : "일반";
+}
+
+function Reward({ nickname, reward, result, card, onHome, onCollection }: { nickname: string; reward?: RewardResponse | null; result: ScanAnalysis; card?: CollectionItemResponse | null; onHome: () => void; onCollection: () => void }) {
   const [revealed, setRevealed] = useState(false);
   useEffect(() => { const timer = window.setTimeout(() => setRevealed(true), 450); return () => window.clearTimeout(timer); }, []);
+
+  // 도감 카드 이름이 가장 정확하다. 없으면 판정 품목명으로 떨어진다.
+  const itemName = card?.name ?? result.detection.classNameKo;
+  const binName = result.disposalCategory ? disposalNames[result.disposalCategory] : undefined;
+  const doneActions = result.requiredActions.map((action) => action.labelKo);
+  const registered = reward?.collection?.registered ?? false;
+  const gainedXp = reward?.reward.xp;
+
   return (
     <main className="reward-screen">
       <div className="confetti" aria-hidden="true">✦ ● ★ ✦ ● ★</div>
       <section className="reward-card">
-        <div className="success-mark">✓</div><p className="eyebrow">행동 완성!</p><h1>완벽해, {nickname}!</h1><p>라벨과 뚜껑을 떼고 납작하게 잘 눌렀어.<br />이제 투명 페트병 전용함으로 보내주자!</p>
-        <div className={`unlocked-card ${revealed ? "revealed" : ""}`}><span className="rarity">일반 카드</span><div className="card-art">🧴<small>✦</small></div><h2>투명 페트병</h2><p>라벨·뚜껑 분리 완료</p></div>
-        <div className="reward-row"><span><b>+10</b><small>판정 완료</small></span><span><b>+20</b><small>다시 찍기 성공</small></span><span><b>+{Math.max(0, (reward?.reward.xp ?? 60) - 30)}</b><small>카드·미션</small></span><strong><b>+{reward?.reward.xp ?? 60} XP</b><small>총 획득</small></strong></div>
+        <div className="success-mark">✓</div><p className="eyebrow">행동 완성!</p><h1>완벽해, {nickname}!</h1>
+        <p>{doneActions.length > 0 ? `${doneActions.join(", ")} 잘 해냈어.` : `${itemName}, 그대로 배출해도 좋아.`}{binName && <><br />{`이제 ${withRo(binName)} 보내주자!`}</>}</p>
+        {registered && (
+          <div className={`unlocked-card ${revealed ? "revealed" : ""}`}>
+            <span className="rarity">{rarityOf(card?.level)} 카드</span>
+            <div className="card-art">{CARD_ART[card?.class ?? "etc"] ?? "♻️"}<small>✦</small></div>
+            <h2>{itemName}</h2>
+            <p>{reward?.collection?.isNew ? "새로 발견한 카드!" : `${reward?.collection?.count ?? card?.count ?? 1}번째 발견`}</p>
+          </div>
+        )}
+        <div className="reward-row">
+          <span><b>+10</b><small>판정 완료</small></span>
+          {reward?.reward.missionCompleted && <span><b>+30</b><small>미션 완료</small></span>}
+          {typeof reward?.student.level === "number" && <span><b>Lv.{reward.student.level}</b><small>지금 레벨</small></span>}
+          <strong><b>{typeof gainedXp === "number" ? `+${gainedXp} XP` : "XP 계산 중"}</b><small>{typeof reward?.student.xp === "number" ? `누적 ${reward.student.xp} XP` : "총 획득"}</small></strong>
+        </div>
         <div className="reward-actions"><button className="secondary-button" onClick={onCollection}>도감에서 보기</button><button className="primary-button" onClick={onHome}>홈으로 돌아가기</button></div>
       </section>
     </main>
@@ -390,6 +438,7 @@ export default function DasiBomApp() {
   const [teacherClass, setTeacherClass] = useState<TeacherClassResponse | null>(null);
   const [scanSessionId, setScanSessionId] = useState<string | null>(null);
   const [reward, setReward] = useState<RewardResponse | null>(null);
+  const [rewardCard, setRewardCard] = useState<CollectionItemResponse | null>(null);
   const [apiNotice, setApiNotice] = useState("");
   const [analysisAttempt, setAnalysisAttempt] = useState(0);
   const [image, setImage] = useState("demo");
@@ -468,6 +517,23 @@ export default function DasiBomApp() {
     setScreen("home");
   }, [pendingClassCode]);
 
+  // 보상 응답은 cardId 만 준다. 카드 이름·등급은 도감 상세에서 가져온다.
+  const grantReward = useCallback(async (sessionId: string, studentToken: string) => {
+    const nextReward = await scanApi.reward(sessionId, studentToken);
+    setReward(nextReward);
+    const cardId = nextReward.collection?.registered ? nextReward.collection.cardId : null;
+    if (cardId) {
+      // 카드 조회가 실패해도 보상 자체는 이미 지급됐다. 화면을 막지 않는다.
+      void collectionApi.detail(cardId, studentToken)
+        .then((detail) => setRewardCard(detail))
+        .catch(() => setRewardCard(null));
+    }
+    if (todayMission) {
+      void missionApi.complete(todayMission.missionId, sessionId, studentToken).catch(() => undefined);
+    }
+    return nextReward;
+  }, [todayMission]);
+
   const runLiveAnalysis = useCallback(async (phase: "before" | "after") => {
     if (!studentSession) throw new Error("학생 인증이 필요해요. 다시 입장해주세요.");
     if (phase === "before") {
@@ -475,11 +541,21 @@ export default function DasiBomApp() {
       const session = await scanApi.create(studentSession.studentToken, "FREE");
       setScanSessionId(session.sessionId);
       await scanApi.uploadBefore(session.sessionId, studentSession.studentToken, blob);
-      return toScanAnalysis(await pollAnalysis(session.sessionId, studentSession.studentToken));
+      const analysis = toScanAnalysis(await pollAnalysis(session.sessionId, studentSession.studentToken));
+      // 처음부터 깨끗해서 고칠 게 없으면 AFTER 없이 여기서 끝난다.
+      // 그때도 보상은 받아야 하므로 직접 지급한다. (AFTER 경로에는 아래에 따로 있다)
+      if (analysis.status === "COMPLETED") {
+        await grantReward(session.sessionId, studentSession.studentToken);
+      }
+      return analysis;
     }
     if (!scanSessionId) throw new Error("진행 중인 촬영 세션을 찾지 못했어요.");
-    const after = await scanApi.uploadAfter(scanSessionId, studentSession.studentToken, true);
-    if (!after.improved || after.status === "ACTION_REQUIRED") {
+    const afterBlob = await imageUrlToBlob(image);
+    await scanApi.uploadAfter(scanSessionId, studentSession.studentToken, afterBlob);
+    const afterResult = await pollAfterAnalysis(scanSessionId, studentSession.studentToken);
+    const after = afterResult.after ?? { improved: false, remainingActions: [] };
+    if (!after.improved) {
+      const message = after.remainingActions[0] ?? "아직 조금 더 손봐야 해.";
       return {
         ...beforeAnalysis,
         analysisId: `analysis-after-${scanSessionId}`,
@@ -490,16 +566,12 @@ export default function DasiBomApp() {
           labelKo: label,
           description: label,
         })),
-        feedback: { title: "한 번만 더 고쳐보자", message: after.message, ttsText: after.message },
+        feedback: { title: "한 번만 더 고쳐보자", message, ttsText: message },
       } satisfies ScanAnalysis;
     }
-    const nextReward = await scanApi.reward(scanSessionId, studentSession.studentToken);
-    setReward(nextReward);
-    if (todayMission) {
-      void missionApi.complete(todayMission.missionId, scanSessionId, studentSession.studentToken).catch(() => undefined);
-    }
+    await grantReward(scanSessionId, studentSession.studentToken);
     return { ...afterAnalysis, scanSessionId, analysisId: `analysis-after-${scanSessionId}` };
-  }, [image, scanSessionId, studentSession, todayMission]);
+  }, [grantReward, image, scanSessionId, studentSession]);
 
   const loginTeacher = useCallback(async (name: string, email: string) => {
     const response = apiConfig.enableMock
@@ -552,7 +624,7 @@ export default function DasiBomApp() {
       case "welcome": return <Welcome onStart={() => setScreen("join")} onTeacher={() => setScreen("teacher-login")} />;
       case "join": return <Join onBack={() => setScreen("welcome")} onSuccess={(code) => { setPendingClassCode(code); setScreen("nickname"); }} />;
       case "nickname": return <Nickname onComplete={enterStudent} />;
-      case "home": return <Home nickname={nickname} homeData={homeData} mission={todayMission} onScan={() => { setScanSessionId(null); setReward(null); setScreen("camera"); }} onCollection={() => setScreen("collection")} onMissions={() => setScreen("missions")} onCharacter={() => setScreen("character")} onBadges={() => setScreen("badges")} onChecklist={() => setScreen("checklist")} onGoal={() => setScreen("class-goal")} onSettings={() => setScreen("settings")} />;
+      case "home": return <Home nickname={nickname} homeData={homeData} mission={todayMission} onScan={() => { setScanSessionId(null); setReward(null); setRewardCard(null); setScreen("camera"); }} onCollection={() => setScreen("collection")} onMissions={() => setScreen("missions")} onCharacter={() => setScreen("character")} onBadges={() => setScreen("badges")} onChecklist={() => setScreen("checklist")} onGoal={() => setScreen("class-goal")} onSettings={() => setScreen("settings")} />;
       case "camera": return <CameraView phase="before" onCancel={() => setScreen("home")} onCapture={(photo) => { setImage(photo); setScreen("preview"); }} />;
       case "preview": return <PhotoPreview image={image} phase="before" onRetake={() => setScreen("camera")} onUse={() => setScreen("analysis")} />;
       case "analysis": return <Analysis key={`before-${analysisAttempt}`} phase="before" mode={effectiveAnalysisMode} run={apiConfig.enableMock ? undefined : () => runLiveAnalysis("before")} onDone={(analysis) => { setResult(analysis); setScreen(analysis.status === "COMPLETED" ? "reward" : "action"); }} onRetry={() => { setAnalysisMode("normal"); setAnalysisAttempt((value) => value + 1); }} onHome={() => setScreen("home")} />;
@@ -560,7 +632,7 @@ export default function DasiBomApp() {
       case "after-camera": return <CameraView phase="after" onCancel={() => setScreen("action")} onCapture={(photo) => { setImage(photo); setScreen("after-preview"); }} />;
       case "after-preview": return <PhotoPreview image={image} phase="after" onRetake={() => setScreen("after-camera")} onUse={() => setScreen("after-analysis")} />;
       case "after-analysis": return <Analysis key={`after-${analysisAttempt}`} phase="after" mode={effectiveAnalysisMode} run={apiConfig.enableMock ? undefined : () => runLiveAnalysis("after")} onDone={(analysis) => { setResult(analysis); setScreen(analysis.status === "COMPLETED" ? "reward" : "action"); }} onRetry={() => { setAnalysisMode("normal"); setAnalysisAttempt((value) => value + 1); }} onHome={() => setScreen("home")} />;
-      case "reward": return <Reward nickname={nickname} reward={reward} onHome={() => setScreen("home")} onCollection={() => setScreen("collection")} />;
+      case "reward": return <Reward nickname={nickname} reward={reward} result={result} card={rewardCard} onHome={() => setScreen("home")} onCollection={() => setScreen("collection")} />;
       case "collection": return <Collection nickname={nickname} remoteCollection={remoteCollection} onBack={() => setScreen("home")} />;
       case "missions": return <MissionsPage mission={todayMission} onBack={() => setScreen("home")} onScan={() => setScreen("camera")} />;
       case "character": return <CharacterPage onBack={() => setScreen("home")} onBadges={() => setScreen("badges")} />;
@@ -572,7 +644,7 @@ export default function DasiBomApp() {
       case "teacher-login": return <TeacherLogin onBack={() => setScreen("welcome")} onLogin={loginTeacher} />;
       case "teacher-dashboard": return <TeacherDashboard teacher={teacherSession} classData={teacherClass} onCreateClass={createTeacherClass} onRefreshCode={refreshTeacherCode} onToggleLock={toggleTeacherClassLock} onLogout={() => { teacherSessionStore.clear(); setTeacherSession(null); setScreen("welcome"); }} />;
     }
-  }, [analysisAttempt, analysisMode, createTeacherClass, effectiveAnalysisMode, enterStudent, homeData, image, loginTeacher, muted, nickname, refreshTeacherCode, remoteCollection, result, reward, runLiveAnalysis, screen, speak, teacherClass, teacherSession, todayMission, toggleTeacherClassLock]);
+  }, [analysisAttempt, analysisMode, createTeacherClass, effectiveAnalysisMode, enterStudent, homeData, image, loginTeacher, muted, nickname, refreshTeacherCode, remoteCollection, result, reward, rewardCard, runLiveAnalysis, screen, speak, teacherClass, teacherSession, todayMission, toggleTeacherClassLock]);
 
   return (
     <>

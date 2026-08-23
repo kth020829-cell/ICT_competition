@@ -24,7 +24,18 @@ export type Screen =
 
 export type ScanPhase = "BEFORE" | "AFTER";
 
-export type ActionCode = "REMOVE_LABEL" | "REMOVE_CAP" | "CRUSH";
+// AI 서버 app/schemas/enums.py ActionCode 와 1:1로 맞춘다.
+export type ActionCode =
+  | "EMPTY_CONTENT"
+  | "RINSE"
+  | "REMOVE_LABEL"
+  | "REMOVE_CAP"
+  | "SEPARATE_MATERIALS"
+  | "FLATTEN"
+  | "CRUSH"
+  | "FOLD"
+  | "DISPOSE_GENERAL"
+  | "ASK_ADULT";
 
 export interface RequiredAction {
   code: ActionCode;
@@ -43,6 +54,8 @@ export interface ScanAnalysis {
     classNameKo: string;
     confidence: number;
   };
+  // AI가 고른 배출처(CLEAR_PET_BIN 등). 보상 화면 안내 문구에 쓴다.
+  disposalCategory?: string;
   requiredActions: RequiredAction[];
   feedback: {
     title: string;
