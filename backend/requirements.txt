@@ -1,0 +1,16 @@
+# 백엔드 메인 서버. 실행: uvicorn app.main:app --port 8000
+# (반드시 backend/ 에서 실행한다. app/firebase.py 가 firebase_key.json 을
+#  상대경로로 읽는다.)
+
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+pydantic==2.13.4
+
+# 멀티파트 사진 업로드 (/sessions/{id}/before·after)
+python-multipart==0.0.32
+
+# Firestore. google.cloud.firestore_v1 은 firebase-admin 이 함께 끌어온다.
+firebase-admin==7.5.0
+
+# AI 추론 서버 호출 (app/routers/session.py)
+httpx==0.28.1
