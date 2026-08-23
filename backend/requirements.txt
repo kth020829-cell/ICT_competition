@@ -1,6 +1,10 @@
 # 백엔드 메인 서버. 실행: uvicorn app.main:app --port 8000
 # (반드시 backend/ 에서 실행한다. app/firebase.py 가 firebase_key.json 을
 #  상대경로로 읽는다.)
+#
+# firebase_key.json 은 저장소에 없다 — 자격 증명이라 커밋하지 않는다.
+# Firebase 콘솔 → 프로젝트 설정 → 서비스 계정 → '새 비공개 키 생성'으로
+# 받아서 backend/firebase_key.json 에 두고 실행한다.
 
 fastapi==0.141.1
 uvicorn[standard]==0.52.4

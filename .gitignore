@@ -1,0 +1,41 @@
+# ─────────────────────────────────────────────────────────────
+# 자격 증명. 절대 커밋하지 않는다.
+#
+# 2026-08-24: 루트에 점(.)이 빠진 `gitignore` 파일이 있었고, 그 안에
+# Firebase 서비스 계정 JSON이 통째로 들어 있었다. 무시 규칙으로 동작한
+# 적이 한 번도 없었고 public 저장소에 그대로 노출되어 Google로부터
+# 키 사용 중지 통보를 받았다. 키 파일은 아래 규칙으로만 관리한다.
+# ─────────────────────────────────────────────────────────────
+firebase_key.json
+*firebase*key*.json
+*-adminsdk-*.json
+service-account*.json
+serviceAccountKey.json
+*.pem
+*.p12
+
+.env
+.env.*
+!.env.example
+
+# ── Python ──
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# ── Node / Next ──
+node_modules/
+.next/
+.vinext/
+dist/
+build/
+*.tsbuildinfo
+
+# ── OS / 에디터 ──
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
