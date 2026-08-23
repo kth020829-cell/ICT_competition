@@ -25,6 +25,7 @@ router = APIRouter(
 
 class SessionCreateRequest(BaseModel):
     type: str
+    missionId: str | None = None
 
 
 class SessionResultRequest(BaseModel):

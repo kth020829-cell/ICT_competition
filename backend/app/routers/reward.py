@@ -1,14 +1,20 @@
 from fastapi import APIRouter, Header, HTTPException
+from google.cloud.firestore_v1 import Increment
+
 from app.firebase import db
 from app.services.collection import collect_card
+from app.services.mission import check_mission
 
-from google.cloud.firestore_v1 import Increment
 
 router = APIRouter(
     prefix="/rewards",
     tags=["Reward"]
 )
 
+
+# ==========================================
+# POST /rewards/{session_id}
+# ==========================================
 
 @router.post("/{session_id}")
 def give_reward(
@@ -46,7 +52,9 @@ def give_reward(
         )
 
     student_doc = student_docs[0]
+
     student_id = student_doc.id
+
     student_data = student_doc.to_dict()
 
 
@@ -74,7 +82,10 @@ def give_reward(
     # 3. 세션 소유자 확인
     # ==========================================
 
-    if session_data.get("studentId") != student_id:
+    if session_data.get(
+        "studentId"
+    ) != student_id:
+
         raise HTTPException(
             status_code=403,
             detail="이 세션에 접근할 권한이 없습니다."
@@ -85,7 +96,10 @@ def give_reward(
     # 4. 세션 완료 확인
     # ==========================================
 
-    if session_data.get("status") != "COMPLETED":
+    if session_data.get(
+        "status"
+    ) != "COMPLETED":
+
         raise HTTPException(
             status_code=400,
             detail="완료된 세션만 보상을 받을 수 있습니다."
@@ -96,7 +110,9 @@ def give_reward(
     # 5. 중복 보상 방지
     # ==========================================
 
-    reward_transaction_id = f"{session_id}_reward"
+    reward_transaction_id = (
+        f"{session_id}_reward"
+    )
 
     reward_ref = (
         db.collection("rewardTransactions")
@@ -106,70 +122,134 @@ def give_reward(
     reward_doc = reward_ref.get()
 
     if reward_doc.exists:
+
         return {
             "success": True,
             "message": "이미 보상을 지급받은 세션입니다.",
-            "rewardTransactionId": reward_transaction_id
+            "rewardTransactionId":
+                reward_transaction_id
         }
 
 
     # ==========================================
-    # 6. 기본 XP
+    # 6. AI 결과 가져오기
     # ==========================================
 
-    xp_gain = 10
+    result_data = session_data.get(
+        "result",
+        {}
+    )
+
+    detected_class = result_data.get(
+        "detectedClass"
+    )
+
+    if not detected_class:
+        raise HTTPException(
+            status_code=400,
+            detail="세션에 쓰레기 판정 결과가 없습니다."
+        )
 
 
     # ==========================================
-    # 7. 미션 보너스
+    # 7. 카드 조회
     # ==========================================
 
-    mission_completed = False
+    card_query = (
+        db.collection("card")
+        .where(
+            "type",
+            "==",
+            detected_class
+        )
+        .limit(1)
+        .stream()
+    )
 
-    # TODO:
-    # 나중에 미션 판정 로직 연결
+    card_docs = list(card_query)
+
+    card_data = None
+    card_id = None
+
+    if card_docs:
+
+        card_doc = card_docs[0]
+
+        card_id = card_doc.id
+
+        card_data = card_doc.to_dict()
+
+
+    # ==========================================
+    # 8. 기존 도감 수집 여부 확인
     #
-    # mission_completed = check_mission(...)
+    # NEW_CARD 미션을 판정하기 위해
+    # 반드시 collect_card()보다 먼저 확인
+    # ==========================================
 
-    if mission_completed:
-        xp_gain += 30
+    student_collection = student_data.get(
+        "collection",
+        {}
+    )
+
+    existing_collection = {}
+
+    if card_id:
+
+        existing_collection = (
+            student_collection.get(
+                card_id,
+                {}
+            )
+        )
+
+    already_collected = (
+        existing_collection.get(
+            "collected",
+            False
+        )
+    )
 
 
     # ==========================================
-    # 8. 현재 XP
+    # 9. 오늘의 미션 확인
     # ==========================================
 
-    current_xp = student_data.get("xp", 0)
+    mission_id = student_data.get(
+        "todayMissionId"
+    )
 
-    new_xp = current_xp + xp_gain
-
-
-    # ==========================================
-    # 9. 레벨 계산
-    # ==========================================
-
-    new_level = (new_xp // 50) + 1
+    mission_type = student_data.get(
+        "todayMissionType"
+    )
 
 
     # ==========================================
-    # 10. 뱃지 계산
+    # 10. 미션 판정
+    #
+    # 도감 추가보다 먼저 실행
     # ==========================================
 
-    if new_level >= 20:
-        badge = "CHALLENGER"
+    mission_result = {
+        "missionId": mission_id,
+        "type": mission_type,
+        "completed": False
+    }
 
-    elif new_level >= 5:
-        badge = "GOLD"
+    if mission_type:
 
-    elif new_level >= 2:
-        badge = "SILVER"
-
-    else:
-        badge = "BRONZE"
+        mission_result = check_mission(
+            mission_type=mission_type,
+            session_data=session_data,
+            card_data=card_data,
+            already_collected=already_collected
+        )
 
 
     # ==========================================
     # 11. 도감 자동 수집
+    #
+    # 미션 판정 이후 실행
     # ==========================================
 
     collection_result = {
@@ -179,24 +259,78 @@ def give_reward(
         "count": 0
     }
 
-    result_data = session_data.get("result")
-
-    if result_data:
-
-        detected_class = result_data.get(
-            "detectedClass"
-        )
-
-        if detected_class:
-
-            collection_result = collect_card(
-                student_id=student_id,
-                detected_class=detected_class
-            )
+    collection_result = collect_card(
+        student_id=student_id,
+        detected_class=detected_class
+    )
 
 
     # ==========================================
-    # 12. 학생 정보 업데이트
+    # 12. XP 계산
+    #
+    # 기본 보상 10 XP
+    # 미션 성공 시 +30 XP
+    # ==========================================
+
+    BASE_XP = 10
+    MISSION_XP = 30
+
+    xp_gain = BASE_XP
+
+    if mission_result["COMPLETED"]:
+        xp_gain += MISSION_XP
+
+
+    # ==========================================
+    # 13. 누적 XP 계산
+    # ==========================================
+
+    current_xp = student_data.get(
+        "xp",
+        0
+    )
+
+    new_xp = current_xp + xp_gain
+
+
+    # ==========================================
+    # 14. 레벨 계산
+    #
+    # XP는 초기화하지 않고 누적
+    #
+    # 0~49   → Level 1
+    # 50~99  → Level 2
+    # 100~149 → Level 3
+    # ==========================================
+
+    new_level = (
+        new_xp // 50
+    ) + 1
+
+
+    # ==========================================
+    # 15. 뱃지 계산
+    # ==========================================
+
+    if new_level >= 20:
+
+        badge = "CHALLENGER"
+
+    elif new_level >= 5:
+
+        badge = "GOLD"
+
+    elif new_level >= 2:
+
+        badge = "SILVER"
+
+    else:
+
+        badge = "BRONZE"
+
+
+    # ==========================================
+    # 16. 학생 정보 업데이트
     # ==========================================
 
     student_ref = (
@@ -204,54 +338,102 @@ def give_reward(
         .document(student_id)
     )
 
-    class_ref = (
-        db.collection("classes")
-        .document(student_data.get("classId"))
-    )
-
     student_ref.update({
+
         "xp": new_xp,
+
         "level": new_level,
+
         "badge": badge
     })
 
-    class_ref.update({
-        "goalCurrent": Increment(1)
-    })
+
+    # ==========================================
+    # 17. 학급 공동 목표 업데이트
+    # ==========================================
+
+    class_id = student_data.get(
+        "classId"
+    )
+
+    if class_id:
+
+        class_ref = (
+            db.collection("classes")
+            .document(str(class_id))
+        )
+
+        class_doc = class_ref.get()
+
+        if class_doc.exists:
+
+            class_ref.update({
+                "goalCurrent": Increment(1)
+            })
 
 
     # ==========================================
-    # 13. 보상 거래 기록
+    # 18. 보상 거래 기록
     # ==========================================
 
     reward_ref.set({
+
         "studentId": student_id,
+
         "sessionId": session_id,
+
         "xp": xp_gain,
-        "missionCompleted": mission_completed,
-        "rewardTransactionId": reward_transaction_id
+
+        "missionId":
+            mission_result["missionId"],
+
+        "missionType":
+            mission_result["type"],
+
+        "missionCompleted":
+            mission_result["completed"],
+
+        "cardId":
+            collection_result.get("cardId"),
+
+        "isNewCard":
+            collection_result.get("isNew", False),
+
+        "rewardTransactionId":
+            reward_transaction_id
     })
 
 
     # ==========================================
-    # 14. 응답
+    # 19. 응답
     # ==========================================
 
     return {
+
         "success": True,
         "sessionId": session_id,
-        "rewardTransactionId": reward_transaction_id,
+        "rewardTransactionId":
+            reward_transaction_id,
 
         "reward": {
+
             "xp": xp_gain,
-            "missionCompleted": mission_completed
+
+            "missionCompleted":
+                mission_result["completed"]
         },
 
+        "mission": mission_result,
+
         "student": {
+
             "xp": new_xp,
+
             "level": new_level,
+
             "badge": badge
         },
 
-        "collection": collection_result
+        "collection":
+            collection_result
     }

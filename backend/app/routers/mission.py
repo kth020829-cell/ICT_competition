@@ -117,7 +117,8 @@ def get_today_mission(
 
     db.collection("students").document(student_id).update({
         "todayMission": {
-            "missionId": mission_id,
+            "todayMissionId": mission_id,
+            "todayMissionType": selected.to_dict().get("type"),
             "date": today,
             "completed": False
         }
